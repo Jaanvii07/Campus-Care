@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 10% 6%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 6%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 240 4% 16%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 5% 26%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 186 100% 50%;
+    --accent-foreground: 240 10% 3.9%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 98%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 98%;
+
+    --border: 240 6% 20%;
+    --input: 240 6% 20%;
+    --ring: 239 84% 67%;
+
+    --radius: 0.75rem;
+
+    --gradient-hero: linear-gradient(135deg, hsl(239 84% 67% / 0.2) 0%, hsl(186 100% 50% / 0.15) 100%);
+    --gradient-card: linear-gradient(135deg, hsl(240 10% 6% / 0.8) 0%, hsl(240 10% 8% / 0.6) 100%);
+    --glow-primary: 0 0 40px hsl(239 84% 67% / 0.3);
+    --glow-accent: 0 0 30px hsl(186 100% 50% / 0.3);
+
+    --sidebar-background: 240 10% 5%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 239 84% 67%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4% 16%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 6% 20%;
+    --sidebar-ring: 239 84% 67%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .glass-card {
+    @apply backdrop-blur-md bg-card/50 border border-border/50;
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300 hover:border-primary/50 hover:shadow-[var(--glow-primary)];
+  }
+
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary via-accent to-primary;
+  }
+
+  .btn-glow {
+    @apply shadow-[0_0_20px_hsl(var(--primary)/0.3)] hover:shadow-[0_0_30px_hsl(var(--primary)/0.5)];
+  }
+}
