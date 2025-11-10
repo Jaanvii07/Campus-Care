@@ -9,9 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Clock, CheckCircle2, LogOut, RefreshCw, Image as ImageIcon, Loader2 } from "lucide-react";
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { LatLngExpression, Icon } from 'leaflet';
-// We use CDN paths for icons to fix the Vite bug
 import api from "@/lib/api";
 
 // --- THE FIX ---
@@ -39,6 +38,16 @@ interface Task {
   longitude?: number;
 }
 
+// Helper component to animate the map view
+const ChangeView = ({ center, zoom }: { center: LatLngExpression, zoom: number }) => {
+  const map = useMap();
+  map.flyTo(center, zoom, {
+    animate: true,
+    duration: 1.5
+  });
+  return null;
+};
+
 const DepartmentDashboard = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -50,6 +59,8 @@ const DepartmentDashboard = () => {
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [mapCenter, setMapCenter] = useState<LatLngExpression | null>(null); // For "fly-to"
+  const defaultMapCenter: LatLngExpression = [22.7196, 75.8577]; // Your campus center
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -124,45 +135,63 @@ const DepartmentDashboard = () => {
            <DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Complaint Image</DialogTitle></DialogHeader>{viewImageUrl && <img src={`http://localhost:5001${viewImageUrl}`} alt="Complaint visual" className="rounded-md object-contain max-h-[70vh] w-auto mx-auto"/>}</DialogContent>
         </Dialog>
 
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold flex items-center gap-2"><RefreshCw className="w-6 h-6 text-primary" />Assigned Tasks</h2>
-          {tasks.length === 0 ? (
-            <Card className="glass-card p-12 text-center"><p>No tasks are currently assigned to your department.</p></Card>
-          ) : tasks.map((task) => (
-            <Card key={task.id} className="glass-card-hover">
-              <CardHeader>
-                <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
-                  <div className="space-y-1">
-                    <CardTitle className="text-xl">{task.title}</CardTitle>
-                    <CardDescription>From: {task.student?.email || 'N/A'}</CardDescription>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Task List Column */}
+          <div className="space-y-4">
+            <h2 className="text-2xl font-semibold flex items-center gap-2"><RefreshCw className="w-6 h-6 text-primary" />Assigned Tasks</h2>
+            {tasks.length === 0 ? (
+              <Card className="glass-card p-12 text-center"><p>No tasks are currently assigned to your department.</p></Card>
+            ) : tasks.map((task) => (
+              <Card 
+                key={task.id} 
+                className="glass-card-hover cursor-pointer"
+                onClick={() => {
+                  if (task.latitude && task.longitude) {
+                    setMapCenter([task.latitude, task.longitude]);
+                  }
+                }}
+              >
+                <CardHeader>
+                  <div className="flex justify-between items-start gap-2">
+                    <div className="space-y-1">
+                      <CardTitle className="text-xl">{task.title}</CardTitle>
+                      <CardDescription>From: {task.student?.email || 'N/A'}</CardDescription>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      {task.imageUrl && (<Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); setViewImageUrl(task.imageUrl); setIsImageDialogOpen(true); }}><ImageIcon className="w-4 h-4" /></Button>)}
+                      <Button variant="hero" onClick={(e) => { e.stopPropagation(); setSelectedTask(task); setUpdateData({ status: task.status, notes: task.resolutionNotes || "" }); setIsUpdateDialogOpen(true); }}><RefreshCw className="w-4 h-4 mr-2" />Update</Button>
+                    </div>
                   </div>
-                  <div className="flex gap-2 items-start">
-                    {task.imageUrl && (<Button variant="outline" size="icon" onClick={() => { setViewImageUrl(task.imageUrl); setIsImageDialogOpen(true); }}><ImageIcon className="w-4 h-4" /></Button>)}
-                    <Button variant="hero" onClick={() => { setSelectedTask(task); setUpdateData({ status: task.status, notes: task.resolutionNotes || "" }); setIsUpdateDialogOpen(true); }}><RefreshCw className="w-4 h-4 mr-2" />Update</Button>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <p className="text-sm text-muted-foreground">{task.description}</p>
-                
-                {/* --- NORMAL MAP VIEWER --- */}
-                {task.latitude && task.longitude && (
-                  <div className="h-[200px] rounded-md overflow-hidden border mt-4">
-                    <MapContainer center={[task.latitude, task.longitude]} zoom={16} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} dragging={false} zoomControl={false}>
-                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                      <Marker position={[task.latitude, task.longitude]}><Popup>{task.title}</Popup></Marker>
-                    </MapContainer>
-                  </div>
-                )}
-                {/* --- END MAP VIEWER --- */}
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">{task.description}</p>
+                  <Badge className={`${getStatusColor(task.status)} gap-1`}>{getStatusIcon(task.status)}{task.status}</Badge>
+                  {task.assignmentNotes && <p className="text-sm italic text-primary mt-2">Admin Notes: {task.assignmentNotes}</p>}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
 
-                <Badge className={`${getStatusColor(task.status)} gap-1`}>{getStatusIcon(task.status)}{task.status}</Badge>
-                {task.assignmentNotes && <p className="text-sm italic text-primary mt-2">Admin Notes: {task.assignmentNotes}</p>}
-                {task.resolutionNotes && <p className="text-sm font-semibold text-success mt-2">Resolution: {task.resolutionNotes}</p>}
+          {/* Map Column */}
+          <div className="space-y-4 lg:sticky lg:top-6">
+            <h2 className="text-2xl font-semibold">Task Map</h2>
+            <Card className="glass-card">
+              <CardContent className="p-0 h-[600px] rounded-lg overflow-hidden">
+                <MapContainer center={defaultMapCenter} zoom={15} style={{ height: '100%', width: '100%' }}>
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  />
+                  {tasks.map(t => t.latitude && t.longitude ? (
+                    <Marker key={t.id} position={[t.latitude, t.longitude]}><Popup>{t.title}</Popup></Marker>
+                  ) : null)}
+                  {mapCenter && <ChangeView center={mapCenter} zoom={18} />}
+                </MapContainer>
               </CardContent>
             </Card>
-          ))}
+          </div>
         </div>
+
       </div>
     </div>
   );

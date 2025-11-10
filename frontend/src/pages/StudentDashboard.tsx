@@ -9,9 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Plus, Clock, CheckCircle2, AlertCircle, LogOut, Loader2, XCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapContainer, TileLayer, Marker, useMapEvents, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, Popup, useMap } from 'react-leaflet';
 import { LatLngExpression, Icon } from 'leaflet';
-// We use CDN paths for icons to fix the Vite bug
 import api from "@/lib/api";
 
 // --- THE FIX ---
@@ -40,7 +39,7 @@ interface Complaint {
   longitude?: number;
 }
 
-// Helper component to handle map clicks
+// Helper component to handle map clicks for the submission form
 const LocationPicker = ({ onLocationSelect }: { onLocationSelect: (loc: { lat: number, lng: number }) => void }) => {
   const [position, setPosition] = useState<LatLngExpression | null>(null);
   const map = useMapEvents({
@@ -55,18 +54,27 @@ const LocationPicker = ({ onLocationSelect }: { onLocationSelect: (loc: { lat: n
   );
 };
 
+// Helper component to animate the map view
+const ChangeView = ({ center, zoom }: { center: LatLngExpression, zoom: number }) => {
+  const map = useMap();
+  map.flyTo(center, zoom, {
+    animate: true,
+    duration: 1.5 // 1.5 second animation
+  });
+  return null;
+};
+
 
 const StudentDashboard = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [complaints, setComplaints] = useState<Complaint[]>([]);
-  const [history, setHistory] = useState<Complaint[]>([]);
+  const [complaints, setComplaints] = useState<Complaint[]>([]); // Active complaints
+  const [history, setHistory] = useState<Complaint[]>([]); // Resolved/Rejected complaints
   const [newComplaint, setNewComplaint] = useState({ title: "", description: "" });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
-  
-  // Set a default center for the map
+  const [mapCenter, setMapCenter] = useState<LatLngExpression | null>(null); // For "fly-to"
   const defaultMapCenter: LatLngExpression = [22.7196, 75.8577]; // Change to your campus lat/long
 
   const fetchComplaints = async () => {
@@ -170,7 +178,6 @@ const StudentDashboard = () => {
                     {selectedFile && <p className="text-xs text-green-500">Selected: {selectedFile.name}</p>}
                   </div>
                   
-                  {/* --- NORMAL MAP SECTION --- */}
                   <div className="space-y-2">
                     <Label>Pin the Location (Optional)</Label>
                     <p className="text-xs text-muted-foreground">Click on the map to set the exact location.</p>
@@ -188,7 +195,6 @@ const StudentDashboard = () => {
                       </MapContainer>
                     </div>
                   </div>
-                  {/* --- END OF MAP SECTION --- */}
 
                   <Button type="submit" variant="hero" className="w-full" disabled={isSubmitting}>
                     {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</> : 'Submit Complaint'}
@@ -200,9 +206,31 @@ const StudentDashboard = () => {
 
           <TabsContent value="complaints" className="space-y-4">
              <h2 className="text-xl font-semibold">Active Complaints</h2>
+             
+             {/* Map Viewer for Active Complaints */}
+             <Card className="glass-card">
+              <CardContent className="p-0 h-[300px] rounded-lg overflow-hidden">
+                <MapContainer center={defaultMapCenter} zoom={15} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false}>
+                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  {complaints.map(c => c.latitude && c.longitude ? (
+                    <Marker key={c.id} position={[c.latitude, c.longitude]}><Popup>{c.title}</Popup></Marker>
+                  ) : null)}
+                  {mapCenter && <ChangeView center={mapCenter} zoom={18} />}
+                </MapContainer>
+              </CardContent>
+             </Card>
+             
              {complaints.length === 0 ? (<Card className="p-4 text-center text-muted-foreground">No active complaints.</Card>) :
               complaints.map((c) => (
-              <Card key={c.id} className="glass-card">
+              <Card 
+                key={c.id} 
+                className="glass-card-hover cursor-pointer"
+                onClick={() => {
+                  if (c.latitude && c.longitude) {
+                    setMapCenter([c.latitude, c.longitude]);
+                  }
+                }}
+              >
                 <CardHeader>
                   <div className="flex justify-between items-start">
                     <div><CardTitle>{c.title}</CardTitle><CardDescription>Submitted: {new Date(c.createdAt).toLocaleDateString()}</CardDescription></div>
@@ -211,20 +239,6 @@ const StudentDashboard = () => {
                 </CardHeader>
                 <CardContent>
                   <p>{c.description}</p>
-                  {c.imageUrl && <img src={`http://localhost:5001${c.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-60 w-auto border"/>}
-                  
-                  {/* --- NORMAL MAP VIEWER --- */}
-                  {c.latitude && c.longitude && (
-                    <div className="h-[200px] rounded-md overflow-hidden border mt-4">
-                      <MapContainer center={[c.latitude, c.longitude]} zoom={16} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} dragging={false} zoomControl={false}>
-                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                        <Marker position={[c.latitude, c.longitude]}><Popup>{c.title}</Popup></Marker>
-                      </MapContainer>
-                    </div>
-                  )}
-                  {/* --- END MAP VIEWER --- */}
-
-                  {c.department && <p className="text-primary mt-2 font-semibold">Assigned: {c.department}</p>}
                 </CardContent>
               </Card>
             ))}
@@ -245,7 +259,6 @@ const StudentDashboard = () => {
                   <p>{c.description}</p>
                   {c.imageUrl && <img src={`http://localhost:5001${c.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-60 w-auto border"/>}
                   
-                  {/* --- NORMAL MAP VIEWER --- */}
                   {c.latitude && c.longitude && (
                     <div className="h-[200px] rounded-md overflow-hidden border mt-4">
                       <MapContainer center={[c.latitude, c.longitude]} zoom={16} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} dragging={false} zoomControl={false}>
@@ -254,8 +267,6 @@ const StudentDashboard = () => {
                       </MapContainer>
                     </div>
                   )}
-                  {/* --- END MAP VIEWER --- */}
-
                   {c.status === 'rejected' && c.rejectionReason && (<p className="text-destructive mt-2 text-sm"><b>Reason:</b> {c.rejectionReason}</p>)}
                   {c.status === 'resolved' && c.resolutionNotes && (<p className="text-success mt-2 text-sm"><b>Resolution:</b> {c.resolutionNotes}</p>)}
                 </CardContent>

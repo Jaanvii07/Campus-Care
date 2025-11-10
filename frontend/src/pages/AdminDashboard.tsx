@@ -9,9 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { Link, useNavigate } from "react-router-dom";
 import { AlertCircle, CheckCircle2, Clock, UserCog, LogOut, Send, Image as ImageIcon, Loader2, XCircle, BarChart2, Users } from "lucide-react";
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import { LatLngExpression, Icon } from 'leaflet';
-// We use CDN paths for icons to fix the Vite bug
 import api from "@/lib/api";
 
 // --- THE FIX ---
@@ -40,6 +39,16 @@ interface Complaint {
   longitude?: number;
 }
 
+// Helper component to animate the map view
+const ChangeView = ({ center, zoom }: { center: LatLngExpression, zoom: number }) => {
+  const map = useMap();
+  map.flyTo(center, zoom, {
+    animate: true,
+    duration: 1.5 // 1.5 second animation
+  });
+  return null;
+};
+
 const AdminDashboard = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -54,6 +63,8 @@ const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isAssigning, setIsAssigning] = useState(false);
   const [isRejecting, setIsRejecting] = useState(false);
+  const [mapCenter, setMapCenter] = useState<LatLngExpression | null>(null); // For "fly-to"
+  const defaultMapCenter: LatLngExpression = [22.7196, 75.8577]; // Your campus center
   
   useEffect(() => {
     const fetchComplaints = async () => {
@@ -186,51 +197,66 @@ const AdminDashboard = () => {
            <DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Complaint Image</DialogTitle></DialogHeader>{viewImageUrl && <img src={`http://localhost:5001${viewImageUrl}`} alt="Complaint visual" className="rounded-md object-contain max-h-[70vh] w-auto mx-auto"/>}</DialogContent>
         </Dialog>
 
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold flex items-center gap-2"><UserCog className="w-6 h-6 text-primary" />All Complaints</h2>
-          {complaints.length === 0 ? (
-             <Card className="glass-card p-12 text-center"><p className="text-lg text-muted-foreground">No complaints found.</p></Card>
-          ) : complaints.map((complaint) => (
-            <Card key={complaint.id} className="glass-card-hover">
-              <CardHeader>
-                <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
-                  <div className="space-y-2 flex-1">
-                    <div className="flex items-start gap-3"><CardTitle className="text-xl">{complaint.title}</CardTitle><Badge className={`${getStatusColor(complaint.status)} flex items-center gap-1`}>{getStatusIcon(complaint.status)}{complaint.status}</Badge></div>
-                    <CardDescription>By: {complaint.student?.email || 'N/A'} on {new Date(complaint.createdAt).toLocaleDateString()}</CardDescription>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Complaint List Column */}
+          <div className="space-y-4">
+            <h2 className="text-2xl font-semibold flex items-center gap-2"><UserCog className="w-6 h-6 text-primary" />All Complaints</h2>
+            {complaints.length === 0 ? (
+              <Card className="glass-card p-12 text-center"><p>No complaints found.</p></Card>
+            ) : complaints.map((complaint) => (
+              <Card 
+                key={complaint.id} 
+                className="glass-card-hover cursor-pointer"
+                onClick={() => {
+                  if (complaint.latitude && complaint.longitude) {
+                    setMapCenter([complaint.latitude, complaint.longitude]);
+                  }
+                }}
+              >
+                <CardHeader>
+                  <div className="flex justify-between items-start gap-4">
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-start gap-3"><CardTitle className="text-xl">{complaint.title}</CardTitle><Badge className={`${getStatusColor(complaint.status)} flex items-center gap-1`}>{getStatusIcon(complaint.status)}{complaint.status}</Badge></div>
+                      <CardDescription>By: {complaint.student?.email || 'N/A'}</CardDescription>
+                    </div>
+                    <div className="flex gap-2 items-start">
+                      {complaint.imageUrl && (<Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); setViewImageUrl(complaint.imageUrl); setIsImageDialogOpen(true); }}><ImageIcon className="w-4 h-4" /></Button>)}
+                      {complaint.status === "pending" && (
+                          <>
+                            <Button variant="destructive" size="icon" onClick={(e) => { e.stopPropagation(); setComplaintToModify(complaint); setIsRejectDialogOpen(true); }}><XCircle className="w-4 h-4" /></Button>
+                            <Button variant="hero" onClick={(e) => { e.stopPropagation(); setComplaintToModify(complaint); setAssignmentData({ department: "", notes: "" }); setIsAssignDialogOpen(true); }}><Send className="w-4 h-4 mr-2" />Assign</Button>
+                          </>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex gap-2 items-start">
-                     {complaint.imageUrl && (<Button variant="outline" size="icon" onClick={() => { setViewImageUrl(complaint.imageUrl); setIsImageDialogOpen(true); }}><ImageIcon className="w-4 h-4" /></Button>)}
-                     {complaint.status === "pending" && (
-                        <>
-                          <Button variant="destructive" size="icon" onClick={() => { setComplaintToModify(complaint); setIsRejectDialogOpen(true); }}><XCircle className="w-4 h-4" /></Button>
-                          <Button variant="hero" onClick={() => { setComplaintToModify(complaint); setAssignmentData({ department: "", notes: "" }); setIsAssignDialogOpen(true); }}><Send className="w-4 h-4 mr-2" />Assign</Button>
-                        </>
-                     )}
-                   </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">{complaint.description}</p>
-                
-                {/* --- NORMAL MAP VIEWER --- */}
-                {complaint.latitude && complaint.longitude && (
-                  <div className="h-[200px] rounded-md overflow-hidden border mt-4">
-                    <MapContainer center={[complaint.latitude, complaint.longitude]} zoom={16} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} dragging={false} zoomControl={false}>
-                      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                      <Marker position={[complaint.latitude, complaint.longitude]}><Popup>{complaint.title}</Popup></Marker>
-                    </MapContainer>
-                  </div>
-                )}
-                {/* --- END MAP VIEWER --- */}
-
-                 {complaint.department && <p className="text-primary mt-2 font-semibold">Assigned: {complaint.department}</p>}
-                 {complaint.assignmentNotes && <p className="text-xs italic mt-1">Notes: {complaint.assignmentNotes}</p>}
-                 {complaint.resolutionNotes && <p className="text-xs text-success mt-1">Resolution: {complaint.resolutionNotes}</p>}
-                 {complaint.rejectionReason && <p className="text-xs text-destructive mt-1">Rejection Reason: {complaint.rejectionReason}</p>}
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground">{complaint.description}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          {/* Map Column */}
+          <div className="space-y-4 lg:sticky lg:top-6">
+            <h2 className="text-2xl font-semibold">Complaint Map</h2>
+            <Card className="glass-card">
+              <CardContent className="p-0 h-[600px] rounded-lg overflow-hidden">
+                <MapContainer center={defaultMapCenter} zoom={15} style={{ height: '100%', width: '100%' }}>
+                  <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                  />
+                  {complaints.map(c => c.latitude && c.longitude ? (
+                    <Marker key={c.id} position={[c.latitude, c.longitude]}><Popup>{c.title}</Popup></Marker>
+                  ) : null)}
+                  {mapCenter && <ChangeView center={mapCenter} zoom={18} />}
+                </MapContainer>
               </CardContent>
             </Card>
-          ))}
+          </div>
         </div>
+
       </div>
     </div>
   );
