@@ -51,9 +51,21 @@ const UserManagement = () => {
   
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newUser.role) {
+      toast({ title: "Error", description: "Please select a role.", variant: "destructive" });
+      return;
+    }
+    if (newUser.role === 'department' && !newUser.department) {
+      toast({ title: "Error", description: "Please select a department.", variant: "destructive" });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await api.post('/auth/register', { ...newUser });
+      await api.post('/auth/register', { 
+        ...newUser,
+        department: newUser.role === 'department' ? newUser.department : undefined,
+      });
       toast({ title: "User Created", description: `Account for ${newUser.email} has been created.` });
       setIsNewUserDialogOpen(false);
       setNewUser({ email: '', password: '', role: '', department: '' });
@@ -145,7 +157,7 @@ const UserManagement = () => {
                     <TableCell><Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>{user.role}</Badge></TableCell>
                     <TableCell>{user.department || 'N/A'}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="destructive" size="icon" onClick={() => setUserToDelete(user)} disabled={user.email.startsWith('admin@')}>
+                      <Button variant="destructive" size="icon" onClick={() => setUserToDelete(user)} disabled={user.role === 'admin'}>
                         <Trash2 className="w-4 h-4"/>
                       </Button>
                     </TableCell>
@@ -158,7 +170,7 @@ const UserManagement = () => {
 
         <AlertDialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
           <AlertDialogContent>
-            <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the user account for {userToDelete?.email}.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the user account for {userToDelete?.email}. This cannot be undone.</AlertDialogDescription></AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
               <AlertDialogAction onClick={handleDeleteUser} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>

@@ -7,114 +7,147 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Plus, Clock, CheckCircle2, AlertCircle, LogOut, Loader2, XCircle } from "lucide-react";
+import { Plus, Clock, CheckCircle2, LogOut, Loader2, ThumbsUp } from "lucide-react"; // Added ThumbsUp
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapContainer, TileLayer, Marker, useMapEvents, Popup, useMap } from 'react-leaflet';
-import { LatLngExpression, Icon } from 'leaflet';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
 import api from "@/lib/api";
-
-// --- THE FIX ---
-// This code block correctly points to the icon images on a public CDN,
-// bypassing the Vite build issue that breaks the map.
-delete (Icon.Default.prototype as any)._getIconUrl;
-Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
-// --- END FIX ---
+import { cn } from "@/lib/utils"; // Import cn for conditional styling
 
 interface Complaint {
   id: string;
   title: string;
   description: string;
-  status: "pending" | "in-progress" | "resolved" | "rejected";
+  status: "in-progress" | "resolved";
   createdAt: string;
   updatedAt: string;
-  department?: string;
+  department: string;
+  location: string;
   imageUrl?: string;
   resolutionNotes?: string;
   assignmentNotes?: string;
-  latitude?: number;
-  longitude?: number;
+  upvoteCount: number;  // <-- NEW
+  hasUpvoted: boolean; // <-- NEW
 }
 
-// Helper component to handle map clicks for the submission form
-const LocationPicker = ({ onLocationSelect }: { onLocationSelect: (loc: { lat: number, lng: number }) => void }) => {
-  const [position, setPosition] = useState<LatLngExpression | null>(null);
-  const map = useMapEvents({
-    click(e) {
-      setPosition(e.latlng);
-      onLocationSelect(e.latlng);
-      map.flyTo(e.latlng, map.getZoom());
-    },
-  });
-  return position === null ? null : (
-    <Marker position={position}><Popup>New Complaint Location</Popup></Marker>
-  );
-};
+// --- Define your campus locations and departments ---
+const departments = [
+  { value: "Maintenance", label: "Maintenance (e.g., broken chairs, lights)" },
+  { value: "IT Services", label: "IT Services (e.g., WiFi, printers)" },
+  { value: "Hostel", label: "Hostel (e.g., room issues, water)" },
+  { value: "Library", label: "Library" },
+  { value: "Security", label: "Security" },
+];
 
-// Helper component to animate the map view
-const ChangeView = ({ center, zoom }: { center: LatLngExpression, zoom: number }) => {
-  const map = useMap();
-  map.flyTo(center, zoom, {
-    animate: true,
-    duration: 1.5 // 1.5 second animation
-  });
-  return null;
-};
+const locations = [
+  { value: "library-main", label: "Library - Main Building" },
+  { value: "library-floor-1", label: "Library - 1st Floor" },
+  { value: "admin-101", label: "Admin Building - Room 101" },
+  { value: "admin-quad", label: "Admin Building - Central Quad" },
+  { value: "hostel-a-104", label: "Hostel A - Room 104" },
+  { value: "hostel-a-common", label: "Hostel A - Common Room" },
+  { value: "hostel-b-202", label: "Hostel B - Room 202" },
+  { value: "it-lab-1", label: "IT Center - Lab 1" },
+];
+// --- End of definitions ---
 
 
 const StudentDashboard = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [complaints, setComplaints] = useState<Complaint[]>([]); // Active complaints
-  const [history, setHistory] = useState<Complaint[]>([]); // Resolved/Rejected complaints
+  const [history, setHistory] = useState<Complaint[]>([]); // Resolved complaints
   const [newComplaint, setNewComplaint] = useState({ title: "", description: "" });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [location, setLocation] = useState<{ lat: number, lng: number } | null>(null);
-  const [mapCenter, setMapCenter] = useState<LatLngExpression | null>(null); // For "fly-to"
-  const defaultMapCenter: LatLngExpression = [22.7196, 75.8577]; // Change to your campus lat/long
+  
+  const [department, setDepartment] = useState("");
+  const [location, setLocation] = useState("");
 
   const fetchComplaints = async () => {
     try {
       const response = await api.get('/complaints/student');
-      const activeComplaints = response.data.filter((c: Complaint) => c.status === 'pending' || c.status === 'in-progress');
-      const historyComplaints = response.data.filter((c: Complaint) => c.status === 'resolved' || c.status === 'rejected');
+      const activeComplaints = response.data.filter((c: Complaint) => c.status === 'in-progress');
+      const historyComplaints = response.data.filter((c: Complaint) => c.status === 'resolved');
       setComplaints(activeComplaints);
       setHistory(historyComplaints);
-    } catch (error: any) {
-      console.error("Failed to fetch complaints:", error);
-    }
+    } catch (error: any) { console.error("Failed to fetch complaints:", error); }
   };
 
   useEffect(() => { fetchComplaints(); }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!department || !location) {
+        toast({ title: "Error", description: "Please select both a department and a location.", variant: "destructive" });
+        return;
+    }
     setIsSubmitting(true);
     const formData = new FormData();
     formData.append('title', newComplaint.title);
     formData.append('description', newComplaint.description);
+    formData.append('department', department); 
+    formData.append('location', location); 
     if (selectedFile) formData.append('image', selectedFile);
-    if (location) {
-      formData.append('latitude', location.lat.toString());
-      formData.append('longitude', location.lng.toString());
-    }
+
     try {
       const response = await api.post('/complaints', formData);
-      setComplaints([response.data, ...complaints]);
+      // Manually add upvote data to the new complaint
+      const newComplaintWithUpvote = { ...response.data, upvoteCount: 1, hasUpvoted: true };
+      setComplaints([newComplaintWithUpvote, ...complaints]);
+      
       setNewComplaint({ title: "", description: "" });
       setSelectedFile(null);
-      setLocation(null);
+      setDepartment("");
+      setLocation("");
       const fileInput = document.getElementById('image-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = "";
+      
       toast({ title: "Complaint Submitted Successfully" });
     } catch (error: any) {
       toast({ title: "Submission Failed", description: error.response?.data?.message || "An error occurred", variant: "destructive" });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // --- NEW UPVOTE HANDLER ---
+  const handleUpvote = async (complaintId: string) => {
+    // Optimistic UI Update: Update the state *before* the API call
+    const updateLists = (list: Complaint[]) => 
+      list.map(c => {
+        if (c.id === complaintId) {
+          return {
+            ...c,
+            hasUpvoted: !c.hasUpvoted,
+            upvoteCount: c.hasUpvoted ? c.upvoteCount - 1 : c.upvoteCount + 1,
+          };
+        }
+        return c;
+      });
+    
+    setComplaints(updateLists(complaints));
+    setHistory(updateLists(history));
+
+    // Send the API request in the background
+    try {
+      await api.post(`/complaints/${complaintId}/upvote`);
+    } catch (error) {
+      // If API fails, revert the optimistic update
+      toast({ title: "Error", description: "Could not register vote.", variant: "destructive" });
+      const revertLists = (list: Complaint[]) =>
+        list.map(c => {
+          if (c.id === complaintId) {
+            return {
+              ...c,
+              hasUpvoted: !c.hasUpvoted,
+              upvoteCount: c.hasUpvoted ? c.upvoteCount + 1 : c.upvoteCount - 1,
+            };
+          }
+          return c;
+        });
+      setComplaints(revertLists(complaints));
+      setHistory(revertLists(history));
     }
   };
 
@@ -133,19 +166,15 @@ const StudentDashboard = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "pending": return "bg-warning/20 text-warning border-warning/50";
       case "in-progress": return "bg-primary/20 text-primary border-primary/50";
       case "resolved": return "bg-success/20 text-success border-success/50";
-      case "rejected": return "bg-destructive/20 text-destructive border-destructive/50";
       default: return "bg-muted";
     }
   };
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case "pending": return <AlertCircle className="w-4 h-4" />;
       case "in-progress": return <Clock className="w-4 h-4" />;
       case "resolved": return <CheckCircle2 className="w-4 h-4" />;
-      case "rejected": return <XCircle className="w-4 h-4" />;
       default: return null;
     }
   };
@@ -170,6 +199,27 @@ const StudentDashboard = () => {
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div><Label htmlFor="title">Title *</Label><Input id="title" value={newComplaint.title} onChange={(e) => setNewComplaint({ ...newComplaint, title: e.target.value })} required /></div>
+                  <div className="space-y-2">
+                    <Label>Department *</Label>
+                    <Select onValueChange={setDepartment} value={department} required>
+                      <SelectTrigger><SelectValue placeholder="Select a department" /></SelectTrigger>
+                      <SelectContent>
+                        {departments.map(dept => (
+                          <SelectItem key={dept.value} value={dept.value}>{dept.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Room / Location *</Label>
+                    <SearchableCombobox
+                      options={locations}
+                      value={location}
+                      onChange={setLocation}
+                      placeholder="Search room or location..."
+                      emptyMessage="No location found."
+                    />
+                  </div>
                   <div><Label htmlFor="description">Description *</Label><Textarea id="description" value={newComplaint.description} onChange={(e) => setNewComplaint({ ...newComplaint, description: e.target.value })} required /></div>
                   <div className="space-y-2">
                     <Label htmlFor="image-upload">Photo (Optional)</Label>
@@ -177,25 +227,6 @@ const StudentDashboard = () => {
                     <p className="text-xs text-muted-foreground">Max 5MB. Images only.</p>
                     {selectedFile && <p className="text-xs text-green-500">Selected: {selectedFile.name}</p>}
                   </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Pin the Location (Optional)</Label>
-                    <p className="text-xs text-muted-foreground">Click on the map to set the exact location.</p>
-                    <div className="h-[300px] rounded-md overflow-hidden border">
-                      <MapContainer 
-                        center={defaultMapCenter}
-                        zoom={15} 
-                        style={{ height: '100%', width: '100%' }}
-                      >
-                        <TileLayer
-                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-                        />
-                        <LocationPicker onLocationSelect={setLocation} />
-                      </MapContainer>
-                    </div>
-                  </div>
-
                   <Button type="submit" variant="hero" className="w-full" disabled={isSubmitting}>
                     {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</> : 'Submit Complaint'}
                   </Button>
@@ -206,31 +237,9 @@ const StudentDashboard = () => {
 
           <TabsContent value="complaints" className="space-y-4">
              <h2 className="text-xl font-semibold">Active Complaints</h2>
-             
-             {/* Map Viewer for Active Complaints */}
-             <Card className="glass-card">
-              <CardContent className="p-0 h-[300px] rounded-lg overflow-hidden">
-                <MapContainer center={defaultMapCenter} zoom={15} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false}>
-                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                  {complaints.map(c => c.latitude && c.longitude ? (
-                    <Marker key={c.id} position={[c.latitude, c.longitude]}><Popup>{c.title}</Popup></Marker>
-                  ) : null)}
-                  {mapCenter && <ChangeView center={mapCenter} zoom={18} />}
-                </MapContainer>
-              </CardContent>
-             </Card>
-             
              {complaints.length === 0 ? (<Card className="p-4 text-center text-muted-foreground">No active complaints.</Card>) :
               complaints.map((c) => (
-              <Card 
-                key={c.id} 
-                className="glass-card-hover cursor-pointer"
-                onClick={() => {
-                  if (c.latitude && c.longitude) {
-                    setMapCenter([c.latitude, c.longitude]);
-                  }
-                }}
-              >
+              <Card key={c.id} className="glass-card">
                 <CardHeader>
                   <div className="flex justify-between items-start">
                     <div><CardTitle>{c.title}</CardTitle><CardDescription>Submitted: {new Date(c.createdAt).toLocaleDateString()}</CardDescription></div>
@@ -239,6 +248,26 @@ const StudentDashboard = () => {
                 </CardHeader>
                 <CardContent>
                   <p>{c.description}</p>
+                  <p className="text-sm font-semibold mt-2">Location: <span className="font-normal">{locations.find(l => l.value === c.location)?.label || c.location}</span></p>
+                  {c.imageUrl && <img src={`http://localhost:5001${c.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-60 w-auto border"/>}
+                  <p className="text-primary mt-2 font-semibold">Assigned: {c.department}</p>
+                  
+                  {/* --- NEW UPVOTE BUTTON --- */}
+                  <div className="flex items-center gap-2 mt-4">
+                    <Button 
+                      variant={c.hasUpvoted ? "default" : "outline"} 
+                      size="sm"
+                      onClick={() => handleUpvote(c.id)}
+                    >
+                      <ThumbsUp className={cn("w-4 h-4 mr-2", c.hasUpvoted && "fill-white")} />
+                      {c.upvoteCount}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      {c.upvoteCount === 1 ? "1 person has this issue" : `${c.upvoteCount} people have this issue`}
+                    </span>
+                  </div>
+                  {/* --- END UPVOTE BUTTON --- */}
+
                 </CardContent>
               </Card>
             ))}
@@ -246,9 +275,9 @@ const StudentDashboard = () => {
 
           <TabsContent value="history" className="space-y-4">
             <h2 className="text-xl font-semibold">Complaint History</h2>
-            {history.length === 0 ? (<Card className="p-4 text-center text-muted-foreground">No resolved or rejected complaints.</Card>) :
+            {history.length === 0 ? (<Card className="p-4 text-center text-muted-foreground">No resolved complaints.</Card>) :
              history.map((c) => (
-              <Card key={c.id} className={c.status === 'resolved' ? 'glass-card bg-success/10' : 'glass-card bg-destructive/10'}>
+              <Card key={c.id} className={'glass-card bg-success/10'}>
                  <CardHeader>
                   <div className="flex justify-between items-start">
                     <div><CardTitle>{c.title}</CardTitle><CardDescription>Status changed: {new Date(c.updatedAt).toLocaleDateString()}</CardDescription></div>
@@ -257,18 +286,20 @@ const StudentDashboard = () => {
                 </CardHeader>
                 <CardContent>
                   <p>{c.description}</p>
+                  <p className="text-sm font-semibold mt-2">Location: <span className="font-normal">{locations.find(l => l.value === c.location)?.label || c.location}</span></p>
                   {c.imageUrl && <img src={`http://localhost:5001${c.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-60 w-auto border"/>}
+                  {c.resolutionNotes && (<p className="text-success mt-2 text-sm"><b>Resolution:</b> {c.resolutionNotes}</p>)}
                   
-                  {c.latitude && c.longitude && (
-                    <div className="h-[200px] rounded-md overflow-hidden border mt-4">
-                      <MapContainer center={[c.latitude, c.longitude]} zoom={16} style={{ height: '100%', width: '100%' }} scrollWheelZoom={false} dragging={false} zoomControl={false}>
-                        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                        <Marker position={[c.latitude, c.longitude]}><Popup>{c.title}</Popup></Marker>
-                      </MapContainer>
-                    </div>
-                  )}
-                  {c.status === 'rejected' && c.rejectionReason && (<p className="text-destructive mt-2 text-sm"><b>Reason:</b> {c.rejectionReason}</p>)}
-                  {c.status === 'resolved' && c.resolutionNotes && (<p className="text-success mt-2 text-sm"><b>Resolution:</b> {c.resolutionNotes}</p>)}
+                  {/* --- NEW UPVOTE COUNT (non-interactive) --- */}
+                  <div className="flex items-center gap-2 mt-4">
+                    <Button variant="outline" size="sm" className="pointer-events-none">
+                      <ThumbsUp className="w-4 h-4 mr-2" />
+                      {c.upvoteCount}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">Total upvotes</span>
+                  </div>
+                  {/* --- END UPVOTE COUNT --- */}
+
                 </CardContent>
               </Card>
             ))}

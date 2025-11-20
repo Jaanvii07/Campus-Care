@@ -10,6 +10,7 @@ router.get('/student', protect, isStudent, complaintController.getStudentComplai
 
 // Admin Routes
 router.get('/', protect, isAdmin, complaintController.getAllComplaints);
+router.get('/stats', protect, isAdmin, complaintController.getComplaintStats);
 
 // Department Route
 router.get('/department', protect, complaintController.getDepartmentComplaints);
@@ -17,7 +18,11 @@ router.get('/department', protect, complaintController.getDepartmentComplaints);
 // Unified Update Route
 router.put('/:id', protect, isAuthorizedToUpdate, complaintController.updateComplaint);
 
-// NEW: Route for admin analytics
-router.get('/stats', protect, isAdmin, complaintController.getComplaintStats);
+// Delete Route
+//router.delete('/:id', protect, isAuthorizedToDelete, complaintController.deleteComplaint);
+
+// --- NEW UPVOTE ROUTE ---
+// Any logged-in user can upvote a complaint
+router.post('/:id/upvote', protect, complaintController.toggleUpvote);
 
 module.exports = router;

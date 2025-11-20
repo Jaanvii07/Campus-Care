@@ -24,4 +24,6 @@ const User = sequelize.define('User', {
   timestamps: true
 });
 
+// All relationships are now handled in /models/index.js
+
 module.exports = User;

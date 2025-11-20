@@ -1,6 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
-const User = require('./user.model');
+// We no longer import User or Upvote here
 
 const Complaint = sequelize.define('Complaint', {
   title: {
@@ -16,37 +16,27 @@ const Complaint = sequelize.define('Complaint', {
     allowNull: true,
   },
   status: {
-    type: DataTypes.ENUM('pending', 'in-progress', 'resolved', 'rejected'),
-    defaultValue: 'pending',
-  },
-  rejectionReason: {
-    type: DataTypes.TEXT,
-    allowNull: true,
+    type: DataTypes.ENUM('in-progress', 'resolved'),
+    defaultValue: 'in-progress',
   },
   department: {
     type: DataTypes.STRING,
-    allowNull: true,
+    allowNull: true, 
   },
-  assignmentNotes: {
+  location: { 
+    type: DataTypes.STRING,
+    allowNull: true, 
+  },
+  assignmentNotes: { 
     type: DataTypes.TEXT,
     allowNull: true,
   },
   resolutionNotes: {
     type: DataTypes.TEXT,
     allowNull: true,
-  },
-  // --- ADD THESE TWO NEW FIELDS ---
-  latitude: {
-    type: DataTypes.FLOAT,
-    allowNull: true
-  },
-  longitude: {
-    type: DataTypes.FLOAT,
-    allowNull: true
   }
 });
 
-User.hasMany(Complaint, { foreignKey: 'studentId' });
-Complaint.belongsTo(User, { as: 'student', foreignKey: 'studentId' });
+// All relationships are now handled in /models/index.js
 
 module.exports = Complaint;

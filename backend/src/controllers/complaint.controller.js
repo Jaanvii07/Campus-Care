@@ -1,30 +1,62 @@
 const Complaint = require('../models/complaint.model');
 const User = require('../models/user.model');
+const Upvote = require('../models/upvote.model');
 const sendEmail = require('../utils/email');
 const { Sequelize } = require('sequelize');
 
+// Helper function to format complaint data
+const formatComplaints = (complaints, userId) => {
+  return complaints.map(c => {
+    const complaintJSON = c.toJSON();
+    const upvotes = complaintJSON.Upvotes || [];
+    const hasUpvoted = upvotes.some(upvote => upvote.userId === userId);
+    delete complaintJSON.Upvotes; 
+    return { ...complaintJSON, upvoteCount: upvotes.length, hasUpvoted };
+  });
+};
+
 /**
- * Creates a new complaint, saves image and location, and sends email.
+ * Creates a new complaint, assigns it directly, and notifies student and department.
  */
 exports.createComplaint = async (req, res) => {
     try {
-        // Get location data from the request body
-        const { title, description, latitude, longitude } = req.body;
+        const { title, description, department, location } = req.body;
         const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+
+        if (!department || !location) {
+             return res.status(400).json({ message: "Department and Location are required." });
+        }
 
         const complaint = await Complaint.create({
             title,
             description,
             imageUrl,
-            latitude,  // Save latitude
-            longitude, // Save longitude
+            department,
+            location,
+            status: 'in-progress', // Set status immediately
             studentId: req.user.id
         });
 
+        // 1. Send Email to Student
         const student = await User.findByPk(req.user.id);
         if (student) {
-            const emailHtml = `<h2>Complaint Received</h2><p>Hi there,</p><p>We have successfully received your complaint titled "<b>${title}</b>".</p><p>We will notify you once an administrator reviews it.</p>`;
-            await sendEmail({ to: student.email, subject: `Complaint Received: ${title}`, html: emailHtml });
+            const emailHtml = `<h2>Complaint Received</h2><p>Hi there,</p><p>Your complaint "<b>${title}</b>" for location "<b>${location}</b>" has been successfully submitted and sent to the <b>${department}</b> department.</p><p>Thank you,<br/>CampusCare Team</p>`;
+            await sendEmail({
+                to: student.email,
+                subject: `Your complaint has been submitted: ${title}`,
+                html: emailHtml
+            });
+        }
+
+        // 2. Send Email to Department
+        const departmentUser = await User.findOne({ where: { department: department }});
+        if (departmentUser) {
+            const departmentHtml = `<h2>New Task Assigned</h2><p>A new task titled "<b>${title}</b>" for location "<b>${location}</b>" has been assigned to your department.</p><p>Please log in to the dashboard to view details.</p>`;
+             await sendEmail({
+                to: departmentUser.email,
+                subject: `New Task: ${title}`,
+                html: departmentHtml
+            });
         }
 
         const newComplaintWithDetails = await Complaint.findByPk(complaint.id, {
@@ -38,37 +70,34 @@ exports.createComplaint = async (req, res) => {
 };
 
 /**
- * Updates a complaint's status and sends email notifications.
+ * Updates a complaint's status (Resolve or Admin adds notes).
  */
 exports.updateComplaint = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, department, resolutionNotes, rejectionReason } = req.body;
+        const { status, resolutionNotes, assignmentNotes } = req.body;
 
         const complaint = await Complaint.findByPk(id, {
             include: { model: User, as: 'student', attributes: ['email'] }
         });
         if (!complaint) return res.status(404).json({ message: 'Complaint not found' });
 
-        await complaint.update(req.body);
+        let updateObject = {};
+        if (status) updateObject.status = status;
+        if (resolutionNotes) updateObject.resolutionNotes = resolutionNotes;
+        if (assignmentNotes) updateObject.assignmentNotes = assignmentNotes; 
+
+        await complaint.update(updateObject);
 
         const studentEmail = complaint.student.email;
 
-        // --- Notification Logic ---
-        if (status === 'in-progress' && department) {
-            const studentHtml = `<h2>Your Complaint is In Progress</h2><p>Your complaint "<b>${complaint.title}</b>" has been assigned to the <b>${department}</b> department.</p>`;
-            await sendEmail({ to: studentEmail, subject: `Update on your complaint: ${complaint.title}`, html: studentHtml });
-            const departmentUser = await User.findOne({ where: { department: department }});
-            if (departmentUser) {
-                const departmentHtml = `<h2>New Task Assigned</h2><p>A new task titled "<b>${complaint.title}</b>" has been assigned to your department.</p>`;
-                 await sendEmail({ to: departmentUser.email, subject: `New Task: ${complaint.title}`, html: departmentHtml });
-            }
-        } else if (status === 'resolved') {
-             const studentHtml = `<h2>Your Complaint has been Resolved</h2><p>Your complaint "<b>${complaint.title}</b>" has been marked as resolved.</p>${resolutionNotes ? `<p><b>Resolution Notes:</b> ${resolutionNotes}</p>` : ''}`;
-             await sendEmail({ to: studentEmail, subject: `Resolved: ${complaint.title}`, html: studentHtml });
-        } else if (status === 'rejected') {
-            const studentHtml = `<h2>Your Complaint Has Been Reviewed</h2><p>Your complaint "<b>${complaint.title}</b>" was rejected.</p>${rejectionReason ? `<p><b>Reason:</b> ${rejectionReason}</p>` : ''}`;
-            await sendEmail({ to: studentEmail, subject: `Update on your complaint: ${complaint.title}`, html: studentHtml });
+        if (status === 'resolved') {
+             const studentHtml = `<h2>Your Complaint has been Resolved</h2><p>Your complaint "<b>${complaint.title}</b>" at location "<b>${complaint.location}</b>" has been marked as resolved.</p>${resolutionNotes ? `<p><b>Resolution Notes:</b> ${resolutionNotes}</p>` : ''}<p>Thank you!</p>`;
+             await sendEmail({
+                to: studentEmail,
+                subject: `Resolved: ${complaint.title}`,
+                html: studentHtml
+            });
         }
 
         res.status(200).json(complaint);
@@ -84,10 +113,14 @@ exports.updateComplaint = async (req, res) => {
 exports.getAllComplaints = async (req, res) => {
     try {
         const complaints = await Complaint.findAll({
-            include: { model: User, as: 'student', attributes: ['email'] },
+            include: [
+                { model: User, as: 'student', attributes: ['email'] },
+                { model: Upvote, attributes: ['userId'] } 
+            ],
             order: [['createdAt', 'DESC']]
         });
-        res.status(200).json(complaints);
+        const formattedComplaints = formatComplaints(complaints, req.user.id);
+        res.status(200).json(formattedComplaints);
     } catch (error) {
         res.status(500).json({ message: "Failed to fetch complaints", error: error.message });
     }
@@ -100,9 +133,13 @@ exports.getStudentComplaints = async (req, res) => {
     try {
         const complaints = await Complaint.findAll({
             where: { studentId: req.user.id },
+            include: [
+                { model: Upvote, attributes: ['userId'] }
+            ],
             order: [['createdAt', 'DESC']]
         });
-        res.status(200).json(complaints);
+        const formattedComplaints = formatComplaints(complaints, req.user.id);
+        res.status(200).json(formattedComplaints);
     } catch (error) {
         res.status(500).json({ message: "Failed to fetch student complaints", error: error.message });
     }
@@ -118,10 +155,14 @@ exports.getDepartmentComplaints = async (req, res) => {
     try {
         const complaints = await Complaint.findAll({
             where: { department: req.user.department },
-            include: { model: User, as: 'student', attributes: ['email'] },
+            include: [
+                { model: User, as: 'student', attributes: ['email'] },
+                { model: Upvote, attributes: ['userId'] }
+            ],
             order: [['createdAt', 'DESC']]
         });
-        res.status(200).json(complaints);
+        const formattedComplaints = formatComplaints(complaints, req.user.id);
+        res.status(200).json(formattedComplaints);
     } catch (error) {
         res.status(500).json({ message: "Failed to fetch department complaints", error: error.message });
     }
@@ -136,6 +177,10 @@ exports.deleteComplaint = async (req, res) => {
         const complaint = await Complaint.findByPk(id);
         if (!complaint) return res.status(404).json({ message: 'Complaint not found' });
         if (req.user.role !== 'admin' && complaint.studentId !== req.user.id) return res.status(403).json({ message: 'Not authorized' });
+        
+        // Before deleting complaint, delete associated upvotes
+        await Upvote.destroy({ where: { complaintId: id } });
+        
         await complaint.destroy();
         res.status(200).json({ message: 'Complaint deleted successfully' });
     } catch (error) {
@@ -150,9 +195,7 @@ exports.getComplaintStats = async (req, res) => {
     try {
         const allComplaints = await Complaint.findAll();
         const totalComplaints = allComplaints.length;
-        const statusCounts = {
-            pending: 0, 'in-progress': 0, resolved: 0, rejected: 0,
-        };
+        const statusCounts = { 'in-progress': 0, resolved: 0 };
         const departmentCounts = {};
 
         for (const complaint of allComplaints) {
@@ -175,5 +218,36 @@ exports.getComplaintStats = async (req, res) => {
     } catch (error) {
         console.error("Error fetching stats:", error);
         res.status(500).json({ message: "Failed to fetch complaint statistics" });
+    }
+};
+
+/**
+ * Toggles an upvote on a complaint.
+ */
+exports.toggleUpvote = async (req, res) => {
+    try {
+        const { id: complaintId } = req.params;
+        const { id: userId } = req.user;
+
+        const existingUpvote = await Upvote.findOne({
+            where: {
+                complaintId: complaintId,
+                userId: userId
+            }
+        });
+
+        if (existingUpvote) {
+            await existingUpvote.destroy();
+            res.status(200).json({ message: 'Upvote removed' });
+        } else {
+            await Upvote.create({
+                complaintId: complaintId,
+                userId: userId
+            });
+            res.status(200).json({ message: 'Upvote added' });
+        }
+    } catch (error) {
+        console.error("Error toggling upvote:", error);
+        res.status(500).json({ message: "Failed to toggle upvote", error: error.message });
     }
 };

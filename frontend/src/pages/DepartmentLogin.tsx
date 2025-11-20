@@ -4,11 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Link, useNavigate } from "react-router-dom";
-import { User, Loader2 } from "lucide-react";
+import { Building2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import api from "@/lib/api";
 
-const Login = () => {
+const DepartmentLogin = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -19,13 +19,14 @@ const Login = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const response = await api.post('/auth/login/student', { email, password });
+      // Call the new DEPARTMENT-specific login route
+      const response = await api.post('/auth/login/department', { email, password });
       
-      // Store the token in localStorage for the "guard" components to read
+      // Store the token
       localStorage.setItem('token', response.data.token);
 
       toast({ title: "Login Successful" });
-      navigate('/student');
+      navigate('/department');
     } catch (error: any) {
       toast({
         title: "Login Failed",
@@ -44,29 +45,21 @@ const Login = () => {
       
       <Card className="glass-card w-full max-w-md relative z-10 animate-slide-up">
         <CardHeader className="text-center space-y-2">
-          <CardTitle className="text-3xl font-bold"><span className="text-gradient">Student Portal</span></CardTitle>
-          <CardDescription className="text-base">Sign in with your student account</CardDescription>
+          <CardTitle className="text-3xl font-bold"><span className="text-gradient">Staff Portal</span></CardTitle>
+          <CardDescription className="text-base">Sign in with your department account</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" placeholder="student@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
+            <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" placeholder="staff@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
             <div className="space-y-2"><Label htmlFor="password">Password</Label><Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing In...</> : <><User className="w-4 h-4 mr-2" /> Sign In as Student</>}
+              {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing In...</> : <><Building2 className="w-4 h-4 mr-2" /> Sign In as Staff</>}
             </Button>
           </form>
-
-          <div className="mt-4 text-center text-sm">
-            <span className="text-muted-foreground">New student? </span>
-            <Link to="/register" className="font-semibold text-primary underline-offset-4 hover:underline">
-              Register here
-            </Link>
-          </div>
-
           <div className="mt-6 text-center text-sm space-x-2">
-            <Link to="/login/admin" className="font-semibold text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Admin Portal</Link>
+            <Link to="/login" className="font-semibold text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Student Portal</Link>
             <span>•</span>
-            <Link to="/login/department" className="font-semibold text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Staff Portal</Link>
+            <Link to="/login/admin" className="font-semibold text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Admin Portal</Link>
           </div>
         </CardContent>
       </Card>
@@ -74,4 +67,4 @@ const Login = () => {
   );
 };
 
-export default Login;
+export default DepartmentLogin;

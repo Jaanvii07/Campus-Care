@@ -1,31 +1,32 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
-const path = require('path'); // <-- IMPORT PATH MODULE
+const path = require('path');
+const cookieParser = require('cookie-parser');
 
-const sequelize = require('./src/config/database');
+const { sequelize } = require('./src/models'); // <-- UPDATED IMPORT
 const authRoutes = require('./src/routes/auth.routes');
 const complaintRoutes = require('./src/routes/complaint.routes');
-
-// Import models to ensure they are part of the Sequelize instance before sync
-require('./src/models/user.model');
-require('./src/models/complaint.model');
+const userRoutes = require('./src/routes/user.routes');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
 
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:8080',
+    credentials: true 
+}));
+app.use(cookieParser());
 app.use(express.json());
-
-// Serve static files from the 'uploads' directory <-- ADD THIS LINE
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/complaints', complaintRoutes);
+app.use('/api/users', userRoutes);
 
-// Error Handling Middleware (handles upload errors)
+// ... (Error handling middleware is the same) ...
 app.use((err, req, res, next) => {
   if (err instanceof require('multer').MulterError) {
     return res.status(400).json({ message: err.message });
@@ -42,9 +43,9 @@ app.use((err, req, res, next) => {
 // Database synchronization and server start
 async function startServer() {
   try {
-    await sequelize.sync({ alter: true });
+    // Use the sequelize instance from the models index
+    await sequelize.sync({ alter: true }); 
     console.log('✅ Database synchronized successfully.');
-
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
     });
