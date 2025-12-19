@@ -10,7 +10,7 @@ import api from "@/lib/api";
 
 const Login = () => {
   const { toast } = useToast();
-  // We keep useNavigate for links, but strictly use window.location for the login redirect
+  // We keep useNavigate for links, but use window.location for the final login redirect
   const navigate = useNavigate(); 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,8 +33,8 @@ const Login = () => {
       toast({ title: "Login Successful" });
 
       // 2. CRITICAL FIX: Redirect to "/student"
-      // This matches the Route defined in your App.tsx: <Route path="/student" ... />
-      // Using window.location.href ensures the App re-checks your token.
+      // Your App.tsx has <Route path="/student" ... /> so we MUST go there.
+      // We use window.location.href to force a fresh load so the app sees the token.
       window.location.href = '/student'; 
 
     } catch (error: any) {
