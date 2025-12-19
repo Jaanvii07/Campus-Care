@@ -3,42 +3,41 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link, useNavigate } from "react-router-dom"; 
+import { Link, useNavigate } from "react-router-dom";
 import { User, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import api from "@/lib/api";
 
 const Login = () => {
   const { toast } = useToast();
-  // We keep useNavigate for links, but use window.location for the final login redirect
-  const navigate = useNavigate(); 
+  const navigate = useNavigate(); // Using standard React Router navigation
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); // Stop form reload
+    e.preventDefault();
     setIsSubmitting(true);
-
+    
     try {
       const response = await api.post('/auth/login/student', { email, password });
       
-      // 1. Store the token
+      // Store the token
       localStorage.setItem('token', response.data.token);
 
+      // Store user info
       if (response.data.user) {
         localStorage.setItem('user', JSON.stringify(response.data.user));
       }
 
       toast({ title: "Login Successful" });
-
-      // 2. CRITICAL FIX: Redirect to "/student"
-      // Your App.tsx has <Route path="/student" ... /> so we MUST go there.
-      // We use window.location.href to force a fresh load so the app sees the token.
-      window.location.href = '/student'; 
+      
+      // ORIGINAL REDIRECT METHOD:
+      // This navigates without reloading the page.
+      // (Ensure your App.tsx route is exactly "/student")
+      navigate('/student'); 
 
     } catch (error: any) {
-      console.error("Login Error:", error);
       toast({
         title: "Login Failed",
         description: error.response?.data?.message || "An unexpected error occurred.",
@@ -63,25 +62,11 @@ const Login = () => {
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
-                <Input 
-                    id="email" 
-                    type="email" 
-                    placeholder="student@example.com" 
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)} 
-                    required 
-                />
+                <Input id="email" type="email" placeholder="student@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
             <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <Input 
-                    id="password" 
-                    type="password" 
-                    placeholder="••••••••" 
-                    value={password} 
-                    onChange={(e) => setPassword(e.target.value)} 
-                    required 
-                />
+                <Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing In...</> : <><User className="w-4 h-4 mr-2" /> Sign In as Student</>}
