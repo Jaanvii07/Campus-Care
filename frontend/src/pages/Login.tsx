@@ -3,42 +3,42 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link, useNavigate } from "react-router-dom"; // kept useNavigate for the back button
+import { Link, useNavigate } from "react-router-dom"; 
 import { User, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import api from "@/lib/api";
 
 const Login = () => {
   const { toast } = useToast();
-  const navigate = useNavigate(); // Used for links, but NOT for login success
+  // We keep useNavigate for links, but strictly use window.location for the login redirect
+  const navigate = useNavigate(); 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); // Prevents the HTML form from reloading the page
+    e.preventDefault(); // Stop form reload
     setIsSubmitting(true);
 
     try {
       const response = await api.post('/auth/login/student', { email, password });
       
-      // 1. Store the token securely
+      // 1. Store the token
       localStorage.setItem('token', response.data.token);
 
-      // Optional: Store user data if your backend sends it
       if (response.data.user) {
         localStorage.setItem('user', JSON.stringify(response.data.user));
       }
 
       toast({ title: "Login Successful" });
 
-      // 2. CRITICAL FIX: Force a hard redirect
-      // This ensures your App.tsx re-runs, finds the token, and lets you pass the "Guard".
-      // Make sure this path matches your App.tsx route (e.g., "/student" or "/student/dashboard")
-      window.location.href = '/student/dashboard'; 
+      // 2. CRITICAL FIX: Redirect to "/student"
+      // This matches the Route defined in your App.tsx: <Route path="/student" ... />
+      // Using window.location.href ensures the App re-checks your token.
+      window.location.href = '/student'; 
 
     } catch (error: any) {
-      console.error("Login error:", error);
+      console.error("Login Error:", error);
       toast({
         title: "Login Failed",
         description: error.response?.data?.message || "An unexpected error occurred.",
