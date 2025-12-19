@@ -198,7 +198,7 @@ const DepartmentDashboard = () => {
               <CardContent className="space-y-3">
                 <p className="text-sm text-muted-foreground">{task.description}</p>
                 <p className="text-sm font-semibold mt-2">Location: <span className="font-normal">{task.location}</span></p>
-                {task.imageUrl && <img src={`http://localhost:5001${task.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-40 border"/>}
+                {task.imageUrl && <img src={`http://localhost:${task.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-40 border"/>}
                 
                 <div className="flex justify-between items-center">
                     <Badge className={`${getStatusColor(task.status)} gap-1`}>{getStatusIcon(task.status)}{task.status}</Badge>

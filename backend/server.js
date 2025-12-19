@@ -13,9 +13,15 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 // Middleware
+const cors = require('cors');
+
+// Allow your Vercel Frontend specifically
 app.use(cors({
-    origin: 'http://localhost:8080',
-    credentials: true 
+  origin: [
+    "http://localhost:5173",
+    "https://campus-care-eight-azure.vercel.app" 
+  ],
+  credentials: true
 }));
 app.use(cookieParser());
 app.use(express.json());
