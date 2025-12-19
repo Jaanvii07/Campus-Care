@@ -2,40 +2,46 @@ import { jwtDecode } from 'jwt-decode';
 
 interface AuthToken {
   id: number;
-  role: 'student' | 'admin' | 'department';
+  role: string; // Changed to 'string' to handle any capitalization
   iat: number;
   exp: number;
 }
 
 export const useAuth = () => {
-  // We get the token from localStorage (it will be set on login)
   const token = localStorage.getItem('token'); 
   
   if (token) {
     try {
       const decodedUser = jwtDecode<AuthToken>(token);
       
-      // Check if token is expired
+      // 1. Check if token is expired
       if (decodedUser.exp * 1000 < Date.now()) {
         localStorage.removeItem('token');
         return { isLoggedIn: false };
       }
       
-      // Token is valid and not expired
+      // 2. CRITICAL FIX: Convert ANY role to lowercase
+      // This makes "Admin" == "admin", "Department" == "department", etc.
+      const role = (decodedUser.role || '').toLowerCase();
+
       return {
         isLoggedIn: true,
-        isAdmin: decodedUser.role === 'admin',
-        isStudent: decodedUser.role === 'student',
-        isDepartment: decodedUser.role === 'department',
+        
+        // Now these checks work even if the DB sends Capital Letters
+        isAdmin: role === 'admin',
+        isStudent: role === 'student',
+        
+        // Safe check for staff/department (handles variations)
+        isDepartment: role === 'department' || role === 'staff' || role === 'maintenance',
+        
         user: decodedUser,
       };
     } catch (e) {
-      // Token is invalid
+      console.error("Token Error:", e);
       localStorage.removeItem('token');
       return { isLoggedIn: false };
     }
   }
   
-  // No token found
   return { isLoggedIn: false };
 };
