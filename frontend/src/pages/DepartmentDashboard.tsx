@@ -9,7 +9,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { Clock, CheckCircle2, LogOut, RefreshCw, Image as ImageIcon, Loader2, ThumbsUp } from "lucide-react";
-import { CampusMap } from "@/components/ui/CampusMap"; // <-- IMPORT THE NEW MAP
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -39,7 +38,6 @@ const DepartmentDashboard = () => {
   const [viewImageUrl, setViewImageUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [highlightedLocation, setHighlightedLocation] = useState<string | null>(null); // For map hover
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -54,21 +52,31 @@ const DepartmentDashboard = () => {
   }, []);
 
   const handleUpdate = async () => {
-    if (!selectedTask || !updateData.status) return;
+    // Validation check
+    if (!selectedTask || !updateData.status) {
+        console.error("Update blocked: Missing task or status");
+        return;
+    }
+    
     setIsUpdating(true);
     try {
       const response = await api.put(`/complaints/${selectedTask.id}`, {
-        status: updateData.status as "in-progress" | "resolved",
+        status: updateData.status,
         resolutionNotes: updateData.notes,
       });
-      setTasks(tasks.map(t => (t.id === selectedTask.id ? response.data : t)));
-      toast({ title: "Task Updated" });
+      
+      // Update the list locally
+      setTasks(tasks.map(t => (t.id === selectedTask.id ? { ...t, ...response.data } : t)));
+      
+      toast({ title: "Task Updated Successfully" });
       setIsUpdateDialogOpen(false);
-    } catch (error) { toast({ title: "Update Failed", variant: "destructive" }); } 
-    finally { setIsUpdating(false); }
+    } catch (error) { 
+        toast({ title: "Update Failed", description: "Please try again.", variant: "destructive" }); 
+    } finally { 
+        setIsUpdating(false); 
+    }
   };
 
-  // --- NEW UPVOTE HANDLER ---
   const handleUpvote = async (taskId: string) => {
     setTasks(tasks.map(t => {
         if (t.id === taskId) {
@@ -84,16 +92,14 @@ const DepartmentDashboard = () => {
       await api.post(`/complaints/${taskId}/upvote`);
     } catch (error) {
       toast({ title: "Error", description: "Could not register vote.", variant: "destructive" });
-      setTasks(tasks.map(t => { // Revert on error
-        if (t.id === taskId) {
-          return { ...t, hasUpvoted: !t.hasUpvoted, upvoteCount: t.hasUpvoted ? t.upvoteCount + 1 : t.upvoteCount - 1 };
-        }
-        return t;
-      }));
+      // Revert if failed
+      const response = await api.get('/complaints/department');
+      setTasks(response.data);
     }
   };
 
   const handleLogout = () => { localStorage.removeItem('token'); toast({ title: "Logged Out" }); navigate("/login"); };
+  
   const getStatusColor = (status: string) => {
     switch (status) {
       case "in-progress": return "bg-primary/20 text-primary border-primary/50";
@@ -121,72 +127,97 @@ const DepartmentDashboard = () => {
             <Button variant="destructive" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" />Logout</Button>
         </div>
 
-        <Dialog open={isUpdateDialogOpen} onOpenChange={setIsUpdateDialogOpen}>{/* ... (Update Dialog is the same) ... */}</Dialog>
-        <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>{/* ... (Image Dialog is the same) ... */}</Dialog>
+        <Dialog open={isUpdateDialogOpen} onOpenChange={setIsUpdateDialogOpen}>
+            <DialogContent className="glass-card">
+              <DialogHeader><DialogTitle>Update Task Status</DialogTitle></DialogHeader>
+              
+              {/* THE FIX: Add a key here to force re-render when the task changes */}
+              <div className="space-y-4 py-4" key={selectedTask?.id}>
+                <div className="space-y-2">
+                    <Label>Status</Label>
+                    {/* THE FIX: Use 'value' instead of 'defaultValue' to control the state */}
+                    <Select 
+                        value={updateData.status} 
+                        onValueChange={(v) => setUpdateData({ ...updateData, status: v })}
+                    >
+                        <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="in-progress">In Progress</SelectItem>
+                            <SelectItem value="resolved">Resolved</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label>Resolution Notes</Label>
+                    <Textarea 
+                        value={updateData.notes} 
+                        onChange={(e) => setUpdateData({ ...updateData, notes: e.target.value })} 
+                        placeholder="Describe how the issue was resolved..."
+                    />
+                </div>
+              </div>
 
-        {/* --- NEW TWO-COLUMN LAYOUT --- */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Task List Column */}
-          <div className="lg:col-span-2 space-y-4">
-            <h2 className="text-2xl font-semibold flex items-center gap-2"><RefreshCw className="w-6 h-6 text-primary" />Assigned Tasks</h2>
-            {tasks.length === 0 ? (
-              <Card className="glass-card p-12 text-center"><p>No tasks are currently assigned to your department.</p></Card>
-            ) : tasks.map((task) => (
-              <Card 
-                key={task.id} 
-                className="glass-card-hover cursor-pointer"
-                onMouseEnter={() => setHighlightedLocation(task.location || null)}
-                onMouseLeave={() => setHighlightedLocation(null)}
-              >
-                <CardHeader>
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="space-y-1">
-                      <CardTitle className="text-xl">{task.title}</CardTitle>
-                      <CardDescription>From: {task.student?.email || 'N/A'}</CardDescription>
-                    </div>
-                    <div className="flex gap-2 items-start">
-                      {task.imageUrl && (<Button variant="outline" size="icon" onClick={(e) => { e.stopPropagation(); setViewImageUrl(task.imageUrl); setIsImageDialogOpen(true); }}><ImageIcon className="w-4 h-4" /></Button>)}
-                      <Button variant="hero" onClick={(e) => { e.stopPropagation(); setSelectedTask(task); setUpdateData({ status: task.status, notes: task.resolutionNotes || "" }); setIsUpdateDialogOpen(true); }}><RefreshCw className="w-4 h-4 mr-2" />Update</Button>
-                    </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsUpdateDialogOpen(false)}>Cancel</Button>
+                <Button variant="hero" onClick={handleUpdate} disabled={isUpdating}>
+                    {isUpdating ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Updating...</> : 'Update Task'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
+           <DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Complaint Image</DialogTitle></DialogHeader>{viewImageUrl && <img src={`http://localhost:5001${viewImageUrl}`} alt="Complaint visual" className="rounded-md object-contain max-h-[70vh] w-auto mx-auto"/>}</DialogContent>
+        </Dialog>
+
+        <div className="space-y-4">
+          <h2 className="text-2xl font-semibold flex items-center gap-2"><RefreshCw className="w-6 h-6 text-primary" />Assigned Tasks</h2>
+          {tasks.length === 0 ? (
+            <Card className="glass-card p-12 text-center"><p>No tasks are currently assigned to your department.</p></Card>
+          ) : tasks.map((task) => (
+            <Card key={task.id} className="glass-card-hover">
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-2">
+                  <div className="space-y-1">
+                    <CardTitle className="text-xl">{task.title}</CardTitle>
+                    <CardDescription>From: {task.student?.email || 'N/A'}</CardDescription>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="text-sm text-muted-foreground">{task.description}</p>
-                  <p className="text-sm font-semibold mt-2">Location: {task.location}</p>
-                  {task.imageUrl && <img src={`http://localhost:5001${task.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-40 border"/>}
-                  <div className="flex justify-between items-center">
+                  <div className="flex gap-2 items-start">
+                    {task.imageUrl && (<Button variant="outline" size="icon" onClick={() => { setViewImageUrl(task.imageUrl); setIsImageDialogOpen(true); }}><ImageIcon className="w-4 h-4" /></Button>)}
+                    <Button variant="hero" onClick={() => { 
+                        setSelectedTask(task); 
+                        // Initialize the form state when opening the dialog
+                        setUpdateData({ status: task.status, notes: task.resolutionNotes || "" }); 
+                        setIsUpdateDialogOpen(true); 
+                    }}>
+                        <RefreshCw className="w-4 h-4 mr-2" />Update
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground">{task.description}</p>
+                <p className="text-sm font-semibold mt-2">Location: <span className="font-normal">{task.location}</span></p>
+                {task.imageUrl && <img src={`http://localhost:5001${task.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-40 border"/>}
+                
+                <div className="flex justify-between items-center">
                     <Badge className={`${getStatusColor(task.status)} gap-1`}>{getStatusIcon(task.status)}{task.status}</Badge>
+                    
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{task.upvoteCount} Upvotes</span>
-                      <Button variant={task.hasUpvted ? "default" : "outline"} size="sm" onClick={() => handleUpvote(task.id)}>
+                      <span className="text-xs text-muted-foreground">{task.upvoteCount === 1 ? "1 person" : `${task.upvoteCount} people`}</span>
+                      <Button variant={task.hasUpvoted ? "default" : "outline"} size="sm" onClick={() => handleUpvote(task.id)}>
                         <ThumbsUp className={cn("w-4 h-4 mr-2", task.hasUpvoted && "fill-white")} />
                         {task.upvoteCount}
                       </Button>
                     </div>
-                  </div>
-                  {task.assignmentNotes && <p className="text-sm italic text-primary mt-2">Admin Notes: {task.assignmentNotes}</p>}
-                  {task.resolutionNotes && <p className="text-sm font-semibold text-success mt-2">Resolution: {task.resolutionNotes}</p>}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                </div>
 
-          {/* Map Column */}
-          <div className="space-y-4 lg:sticky lg:top-6">
-            <h2 className="text-2xl font-semibold">Campus Map</h2>
-            <Card className="glass-card">
-              <CardContent className="p-4">
-                <CampusMap 
-                  interactive={false} 
-                  highlightedLocation={highlightedLocation}
-                />
-                <p className="text-xs text-muted-foreground mt-2">Areas are color-coded by the responsible department.</p>
+                {task.assignmentNotes && <p className="text-sm italic text-primary mt-2">Admin Notes: {task.assignmentNotes}</p>}
+                {task.resolutionNotes && <p className="text-sm font-semibold text-success mt-2">Resolution: {task.resolutionNotes}</p>}
               </CardContent>
             </Card>
-          </div>
+          ))}
         </div>
-        {/* --- END TWO-COLUMN LAYOUT --- */}
-
       </div>
     </div>
   );

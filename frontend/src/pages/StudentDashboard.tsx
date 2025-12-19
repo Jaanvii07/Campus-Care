@@ -7,12 +7,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { Plus, Clock, CheckCircle2, LogOut, Loader2, ThumbsUp } from "lucide-react"; // Added ThumbsUp
+import { Plus, Clock, CheckCircle2, LogOut, Loader2, ThumbsUp, Users } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
 import api from "@/lib/api";
-import { cn } from "@/lib/utils"; // Import cn for conditional styling
+import { cn } from "@/lib/utils";
 
 interface Complaint {
   id: string;
@@ -26,15 +26,14 @@ interface Complaint {
   imageUrl?: string;
   resolutionNotes?: string;
   assignmentNotes?: string;
-  upvoteCount: number;  // <-- NEW
-  hasUpvoted: boolean; // <-- NEW
+  upvoteCount: number;
+  hasUpvoted: boolean;
 }
 
-// --- Define your campus locations and departments ---
 const departments = [
-  { value: "Maintenance", label: "Maintenance (e.g., broken chairs, lights)" },
-  { value: "IT Services", label: "IT Services (e.g., WiFi, printers)" },
-  { value: "Hostel", label: "Hostel (e.g., room issues, water)" },
+  { value: "Maintenance", label: "Maintenance" },
+  { value: "IT Services", label: "IT Services" },
+  { value: "Hostel", label: "Hostel" },
   { value: "Library", label: "Library" },
   { value: "Security", label: "Security" },
 ];
@@ -49,29 +48,35 @@ const locations = [
   { value: "hostel-b-202", label: "Hostel B - Room 202" },
   { value: "it-lab-1", label: "IT Center - Lab 1" },
 ];
-// --- End of definitions ---
-
 
 const StudentDashboard = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [complaints, setComplaints] = useState<Complaint[]>([]); // Active complaints
-  const [history, setHistory] = useState<Complaint[]>([]); // Resolved complaints
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [history, setHistory] = useState<Complaint[]>([]);
+  const [publicComplaints, setPublicComplaints] = useState<Complaint[]>([]); // Community Feed
   const [newComplaint, setNewComplaint] = useState({ title: "", description: "" });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [department, setDepartment] = useState("");
   const [location, setLocation] = useState("");
+  
+  // Filters for Community Tab
+  const [filterDept, setFilterDept] = useState("all");
+  const [filterLoc, setFilterLoc] = useState("");
 
   const fetchComplaints = async () => {
     try {
-      const response = await api.get('/complaints/student');
-      const activeComplaints = response.data.filter((c: Complaint) => c.status === 'in-progress');
-      const historyComplaints = response.data.filter((c: Complaint) => c.status === 'resolved');
-      setComplaints(activeComplaints);
-      setHistory(historyComplaints);
-    } catch (error: any) { console.error("Failed to fetch complaints:", error); }
+      // 1. Fetch MY complaints
+      const myResponse = await api.get('/complaints/student');
+      setComplaints(myResponse.data.filter((c: Complaint) => c.status === 'in-progress'));
+      setHistory(myResponse.data.filter((c: Complaint) => c.status === 'resolved'));
+
+      // 2. Fetch PUBLIC complaints (Community)
+      const publicResponse = await api.get('/complaints/public');
+      setPublicComplaints(publicResponse.data);
+    } catch (error: any) { console.error("Failed to fetch data:", error); }
   };
 
   useEffect(() => { fetchComplaints(); }, []);
@@ -86,98 +91,62 @@ const StudentDashboard = () => {
     const formData = new FormData();
     formData.append('title', newComplaint.title);
     formData.append('description', newComplaint.description);
-    formData.append('department', department); 
-    formData.append('location', location); 
+    formData.append('department', department);
+    formData.append('location', location);
     if (selectedFile) formData.append('image', selectedFile);
 
     try {
       const response = await api.post('/complaints', formData);
-      // Manually add upvote data to the new complaint
-      const newComplaintWithUpvote = { ...response.data, upvoteCount: 1, hasUpvoted: true };
-      setComplaints([newComplaintWithUpvote, ...complaints]);
+      const newComp = { ...response.data, upvoteCount: 0, hasUpvoted: false };
       
+      setComplaints([newComp, ...complaints]);
+      setPublicComplaints([newComp, ...publicComplaints]); // Add to public feed too
+
       setNewComplaint({ title: "", description: "" });
       setSelectedFile(null);
       setDepartment("");
       setLocation("");
       const fileInput = document.getElementById('image-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = "";
-      
       toast({ title: "Complaint Submitted Successfully" });
     } catch (error: any) {
-      toast({ title: "Submission Failed", description: error.response?.data?.message || "An error occurred", variant: "destructive" });
-    } finally {
-      setIsSubmitting(false);
-    }
+      toast({ title: "Submission Failed", description: error.response?.data?.message, variant: "destructive" });
+    } finally { setIsSubmitting(false); }
   };
 
-  // --- NEW UPVOTE HANDLER ---
   const handleUpvote = async (complaintId: string) => {
-    // Optimistic UI Update: Update the state *before* the API call
-    const updateLists = (list: Complaint[]) => 
-      list.map(c => {
-        if (c.id === complaintId) {
-          return {
-            ...c,
-            hasUpvoted: !c.hasUpvoted,
-            upvoteCount: c.hasUpvoted ? c.upvoteCount - 1 : c.upvoteCount + 1,
-          };
-        }
-        return c;
-      });
-    
-    setComplaints(updateLists(complaints));
-    setHistory(updateLists(history));
+    const updateList = (list: Complaint[]) => list.map(c => {
+      if (c.id === complaintId) {
+        return { ...c, hasUpvoted: !c.hasUpvoted, upvoteCount: c.hasUpvoted ? c.upvoteCount - 1 : c.upvoteCount + 1 };
+      }
+      return c;
+    });
 
-    // Send the API request in the background
+    setComplaints(updateList(complaints));
+    setHistory(updateList(history));
+    setPublicComplaints(updateList(publicComplaints));
+
     try {
       await api.post(`/complaints/${complaintId}/upvote`);
     } catch (error) {
-      // If API fails, revert the optimistic update
-      toast({ title: "Error", description: "Could not register vote.", variant: "destructive" });
-      const revertLists = (list: Complaint[]) =>
-        list.map(c => {
-          if (c.id === complaintId) {
-            return {
-              ...c,
-              hasUpvoted: !c.hasUpvoted,
-              upvoteCount: c.hasUpvoted ? c.upvoteCount + 1 : c.upvoteCount - 1,
-            };
-          }
-          return c;
-        });
-      setComplaints(revertLists(complaints));
-      setHistory(revertLists(history));
+      toast({ title: "Error", description: "Vote failed.", variant: "destructive" });
+      fetchComplaints(); // Revert on error by re-fetching
     }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast({ title: "File Too Large", description: "Maximum file size is 5MB.", variant: "destructive"});
-        event.target.value = ""; return;
-      }
-      setSelectedFile(file);
-    }
+    if (file) setSelectedFile(file);
   };
 
   const handleLogout = () => { localStorage.removeItem('token'); toast({ title: "Logged Out" }); navigate("/login"); };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "in-progress": return "bg-primary/20 text-primary border-primary/50";
-      case "resolved": return "bg-success/20 text-success border-success/50";
-      default: return "bg-muted";
-    }
-  };
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case "in-progress": return <Clock className="w-4 h-4" />;
-      case "resolved": return <CheckCircle2 className="w-4 h-4" />;
-      default: return null;
-    }
-  };
+  // Filter Logic
+  const filteredCommunity = publicComplaints.filter(c => {
+    const matchesDept = filterDept === "all" || c.department === filterDept;
+    const matchesLoc = filterLoc === "" || c.location === filterLoc;
+    return matchesDept && matchesLoc;
+  });
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8">
@@ -186,120 +155,109 @@ const StudentDashboard = () => {
           <h1 className="text-3xl font-bold"><span className="text-gradient">Student Dashboard</span></h1>
           <Button variant="destructive" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" />Logout</Button>
         </div>
-        <Tabs defaultValue="submit">
-          <TabsList className="grid w-full grid-cols-3 max-w-lg">
-            <TabsTrigger value="submit" className="gap-2"><Plus className="w-4 h-4" />Submit</TabsTrigger>
-            <TabsTrigger value="complaints" className="gap-2"><Clock className="w-4 h-4" />Active</TabsTrigger>
+        <Tabs defaultValue="community">
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
+            <TabsTrigger value="community" className="gap-2"><Users className="w-4 h-4" />Community</TabsTrigger>
+            <TabsTrigger value="submit" className="gap-2"><Plus className="w-4 h-4" />New</TabsTrigger>
+            <TabsTrigger value="complaints" className="gap-2"><Clock className="w-4 h-4" />My Active</TabsTrigger>
             <TabsTrigger value="history" className="gap-2"><CheckCircle2 className="w-4 h-4" />History</TabsTrigger>
           </TabsList>
 
+          {/* --- NEW COMMUNITY TAB --- */}
+          <TabsContent value="community" className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-4 p-4 bg-secondary/20 rounded-lg border">
+                <div className="flex-1">
+                    <Label className="mb-2 block">Filter by Department</Label>
+                    <Select onValueChange={setFilterDept} value={filterDept}>
+                        <SelectTrigger><SelectValue placeholder="All Departments" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Departments</SelectItem>
+                            {departments.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="flex-1">
+                    <Label className="mb-2 block">Filter by Location</Label>
+                    <SearchableCombobox options={locations} value={filterLoc} onChange={setFilterLoc} placeholder="Any Location" emptyMessage="No location found." />
+                </div>
+            </div>
+
+            {filteredCommunity.length === 0 ? (
+                <Card className="p-8 text-center text-muted-foreground">No active issues found matching your filters.</Card>
+            ) : filteredCommunity.map(c => (
+                <Card key={c.id} className="glass-card">
+                    <CardHeader>
+                        <div className="flex justify-between items-start">
+                            <div><CardTitle>{c.title}</CardTitle><CardDescription>{c.department} • {locations.find(l=>l.value===c.location)?.label || c.location}</CardDescription></div>
+                            <Badge className="bg-primary/20 text-primary border-primary/50">In Progress</Badge>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <p className="text-muted-foreground mb-3">{c.description}</p>
+                        <div className="flex items-center gap-2">
+                            <Button variant={c.hasUpvoted ? "default" : "outline"} size="sm" onClick={() => handleUpvote(c.id)}>
+                                <ThumbsUp className={cn("w-4 h-4 mr-2", c.hasUpvoted && "fill-white")} />{c.upvoteCount}
+                            </Button>
+                            <span className="text-xs text-muted-foreground">{c.upvoteCount === 1 ? "1 person" : `${c.upvoteCount} people`} facing this</span>
+                        </div>
+                    </CardContent>
+                </Card>
+            ))}
+          </TabsContent>
+
           <TabsContent value="submit">
             <Card className="glass-card-hover">
-              <CardHeader><CardTitle>Submit New Complaint</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Report a New Issue</CardTitle></CardHeader>
               <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  <div><Label htmlFor="title">Title *</Label><Input id="title" value={newComplaint.title} onChange={(e) => setNewComplaint({ ...newComplaint, title: e.target.value })} required /></div>
-                  <div className="space-y-2">
-                    <Label>Department *</Label>
-                    <Select onValueChange={setDepartment} value={department} required>
-                      <SelectTrigger><SelectValue placeholder="Select a department" /></SelectTrigger>
-                      <SelectContent>
-                        {departments.map(dept => (
-                          <SelectItem key={dept.value} value={dept.value}>{dept.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div><Label>Title *</Label><Input value={newComplaint.title} onChange={(e) => setNewComplaint({ ...newComplaint, title: e.target.value })} required /></div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div><Label>Department *</Label><Select onValueChange={setDepartment} value={department}><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger><SelectContent>{departments.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}</SelectContent></Select></div>
+                      <div><Label>Location *</Label><SearchableCombobox options={locations} value={location} onChange={setLocation} placeholder="Select room..." emptyMessage="No location found." /></div>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Room / Location *</Label>
-                    <SearchableCombobox
-                      options={locations}
-                      value={location}
-                      onChange={setLocation}
-                      placeholder="Search room or location..."
-                      emptyMessage="No location found."
-                    />
-                  </div>
-                  <div><Label htmlFor="description">Description *</Label><Textarea id="description" value={newComplaint.description} onChange={(e) => setNewComplaint({ ...newComplaint, description: e.target.value })} required /></div>
-                  <div className="space-y-2">
-                    <Label htmlFor="image-upload">Photo (Optional)</Label>
-                    <Input id="image-upload" type="file" accept="image/*" onChange={handleFileChange} className="cursor-pointer file:text-primary file:font-semibold"/>
-                    <p className="text-xs text-muted-foreground">Max 5MB. Images only.</p>
-                    {selectedFile && <p className="text-xs text-green-500">Selected: {selectedFile.name}</p>}
-                  </div>
-                  <Button type="submit" variant="hero" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</> : 'Submit Complaint'}
-                  </Button>
+                  <div><Label>Description *</Label><Textarea value={newComplaint.description} onChange={(e) => setNewComplaint({ ...newComplaint, description: e.target.value })} required /></div>
+                  <div><Label>Photo (Optional)</Label><Input type="file" accept="image/*" onChange={handleFileChange} /></div>
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>{isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</> : 'Submit Complaint'}</Button>
                 </form>
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="complaints" className="space-y-4">
-             <h2 className="text-xl font-semibold">Active Complaints</h2>
-             {complaints.length === 0 ? (<Card className="p-4 text-center text-muted-foreground">No active complaints.</Card>) :
+             <h2 className="text-xl font-semibold">My Active Complaints</h2>
+             {complaints.length === 0 ? (<Card className="p-4 text-center text-muted-foreground">You have no active complaints.</Card>) :
               complaints.map((c) => (
               <Card key={c.id} className="glass-card">
                 <CardHeader>
                   <div className="flex justify-between items-start">
-                    <div><CardTitle>{c.title}</CardTitle><CardDescription>Submitted: {new Date(c.createdAt).toLocaleDateString()}</CardDescription></div>
-                    <Badge className={`${getStatusColor(c.status)} gap-1`}>{getStatusIcon(c.status)}{c.status}</Badge>
+                    <div><CardTitle>{c.title}</CardTitle><CardDescription>{new Date(c.createdAt).toLocaleDateString()}</CardDescription></div>
+                    <Badge className="bg-primary/20 text-primary border-primary/50">In Progress</Badge>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p>{c.description}</p>
-                  <p className="text-sm font-semibold mt-2">Location: <span className="font-normal">{locations.find(l => l.value === c.location)?.label || c.location}</span></p>
-                  {c.imageUrl && <img src={`http://localhost:5001${c.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-60 w-auto border"/>}
-                  <p className="text-primary mt-2 font-semibold">Assigned: {c.department}</p>
-                  
-                  {/* --- NEW UPVOTE BUTTON --- */}
-                  <div className="flex items-center gap-2 mt-4">
-                    <Button 
-                      variant={c.hasUpvoted ? "default" : "outline"} 
-                      size="sm"
-                      onClick={() => handleUpvote(c.id)}
-                    >
-                      <ThumbsUp className={cn("w-4 h-4 mr-2", c.hasUpvoted && "fill-white")} />
-                      {c.upvoteCount}
-                    </Button>
-                    <span className="text-xs text-muted-foreground">
-                      {c.upvoteCount === 1 ? "1 person has this issue" : `${c.upvoteCount} people have this issue`}
-                    </span>
-                  </div>
-                  {/* --- END UPVOTE BUTTON --- */}
-
+                  <p className="mb-2">{c.description}</p>
+                  <p className="text-sm font-semibold mt-2">Location: {c.location}</p>
+                  {c.imageUrl && <img src={`http://localhost:5001${c.imageUrl}`} alt="Evidence" className="mt-2 rounded-md max-h-40 border"/>}
+                  <div className="mt-3 flex items-center gap-2"><Button variant="outline" size="sm" className="pointer-events-none"><ThumbsUp className="w-4 h-4 mr-2" />{c.upvoteCount}</Button></div>
                 </CardContent>
               </Card>
             ))}
           </TabsContent>
 
           <TabsContent value="history" className="space-y-4">
-            <h2 className="text-xl font-semibold">Complaint History</h2>
-            {history.length === 0 ? (<Card className="p-4 text-center text-muted-foreground">No resolved complaints.</Card>) :
+            <h2 className="text-xl font-semibold">My Resolved History</h2>
+            {history.length === 0 ? (<Card className="p-4 text-center text-muted-foreground">No resolved complaints yet.</Card>) :
              history.map((c) => (
-              <Card key={c.id} className={'glass-card bg-success/10'}>
+              <Card key={c.id} className="glass-card bg-success/10">
                  <CardHeader>
                   <div className="flex justify-between items-start">
-                    <div><CardTitle>{c.title}</CardTitle><CardDescription>Status changed: {new Date(c.updatedAt).toLocaleDateString()}</CardDescription></div>
-                    <Badge className={`${getStatusColor(c.status)} gap-1`}>{getStatusIcon(c.status)}{c.status}</Badge>
+                    <div><CardTitle>{c.title}</CardTitle><CardDescription>Resolved on: {new Date(c.updatedAt).toLocaleDateString()}</CardDescription></div>
+                    <Badge className="bg-success/20 text-success border-success/50">Resolved</Badge>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p>{c.description}</p>
-                  <p className="text-sm font-semibold mt-2">Location: <span className="font-normal">{locations.find(l => l.value === c.location)?.label || c.location}</span></p>
-                  {c.imageUrl && <img src={`http://localhost:5001${c.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-60 w-auto border"/>}
-                  {c.resolutionNotes && (<p className="text-success mt-2 text-sm"><b>Resolution:</b> {c.resolutionNotes}</p>)}
-                  
-                  {/* --- NEW UPVOTE COUNT (non-interactive) --- */}
-                  <div className="flex items-center gap-2 mt-4">
-                    <Button variant="outline" size="sm" className="pointer-events-none">
-                      <ThumbsUp className="w-4 h-4 mr-2" />
-                      {c.upvoteCount}
-                    </Button>
-                    <span className="text-xs text-muted-foreground">Total upvotes</span>
-                  </div>
-                  {/* --- END UPVOTE COUNT --- */}
-
+                  <p className="mb-2">{c.description}</p>
+                  {c.resolutionNotes && <p className="text-sm text-success font-semibold">Resolution: {c.resolutionNotes}</p>}
                 </CardContent>
               </Card>
             ))}

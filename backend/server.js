@@ -44,7 +44,7 @@ app.use((err, req, res, next) => {
 async function startServer() {
   try {
     // Use the sequelize instance from the models index
-    await sequelize.sync({ alter: true }); 
+    await sequelize.sync();
     console.log('✅ Database synchronized successfully.');
     app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
