@@ -3,30 +3,42 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom"; // kept useNavigate for the back button
 import { User, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import api from "@/lib/api";
 
 const Login = () => {
   const { toast } = useToast();
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // Used for links, but NOT for login success
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault(); // Prevents the HTML form from reloading the page
     setIsSubmitting(true);
+
     try {
       const response = await api.post('/auth/login/student', { email, password });
       
-      // Store the token in localStorage for the "guard" components to read
+      // 1. Store the token securely
       localStorage.setItem('token', response.data.token);
 
+      // Optional: Store user data if your backend sends it
+      if (response.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+
       toast({ title: "Login Successful" });
-      navigate('/student');
+
+      // 2. CRITICAL FIX: Force a hard redirect
+      // This ensures your App.tsx re-runs, finds the token, and lets you pass the "Guard".
+      // Make sure this path matches your App.tsx route (e.g., "/student" or "/student/dashboard")
+      window.location.href = '/student/dashboard'; 
+
     } catch (error: any) {
+      console.error("Login error:", error);
       toast({
         title: "Login Failed",
         description: error.response?.data?.message || "An unexpected error occurred.",
@@ -49,8 +61,28 @@ const Login = () => {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" placeholder="student@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-            <div className="space-y-2"><Label htmlFor="password">Password</Label><Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
+            <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="student@example.com" 
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)} 
+                    required 
+                />
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input 
+                    id="password" 
+                    type="password" 
+                    placeholder="••••••••" 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    required 
+                />
+            </div>
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing In...</> : <><User className="w-4 h-4 mr-2" /> Sign In as Student</>}
             </Button>
