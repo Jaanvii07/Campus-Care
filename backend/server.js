@@ -1,10 +1,10 @@
 const express = require('express');
-const cors = require('cors');
+const cors = require('cors'); // ✅ Kept this one
 require('dotenv').config();
 const path = require('path');
 const cookieParser = require('cookie-parser');
 
-const { sequelize } = require('./src/models'); // <-- UPDATED IMPORT
+const { sequelize } = require('./src/models');
 const authRoutes = require('./src/routes/auth.routes');
 const complaintRoutes = require('./src/routes/complaint.routes');
 const userRoutes = require('./src/routes/user.routes');
@@ -12,10 +12,9 @@ const userRoutes = require('./src/routes/user.routes');
 const app = express();
 const PORT = process.env.PORT || 5001;
 
-// Middleware
-const cors = require('cors');
+// --- Middleware ---
+// ❌ REMOVED DUPLICATE 'const cors' line here
 
-// Allow your Vercel Frontend specifically
 app.use(cors({
   origin: [
     "http://localhost:5173",
@@ -23,16 +22,17 @@ app.use(cors({
   ],
   credentials: true
 }));
+
 app.use(cookieParser());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// API Routes
+// --- API Routes ---
 app.use('/api/auth', authRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/users', userRoutes);
 
-// ... (Error handling middleware is the same) ...
+// --- Error Handling ---
 app.use((err, req, res, next) => {
   if (err instanceof require('multer').MulterError) {
     return res.status(400).json({ message: err.message });
@@ -46,10 +46,9 @@ app.use((err, req, res, next) => {
   next();
 });
 
-// Database synchronization and server start
+// --- Start Server ---
 async function startServer() {
   try {
-    // Use the sequelize instance from the models index
     await sequelize.sync();
     console.log('✅ Database synchronized successfully.');
     app.listen(PORT, () => {
