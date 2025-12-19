@@ -237,7 +237,14 @@ const StudentDashboard = () => {
                 <CardContent>
                   <p className="mb-2">{c.description}</p>
                   <p className="text-sm font-semibold mt-2">Location: {c.location}</p>
-                  {c.imageUrl && <img src={`http://localhost:5001${c.imageUrl}`} alt="Evidence" className="mt-2 rounded-md max-h-40 border"/>}
+
+                  {c.imageUrl && (
+                    <img 
+                      src={`${import.meta.env.VITE_BACKEND_URL || 'https://campus-care-2-y1sf.onrender.com'}${c.imageUrl}`} 
+                      alt="Evidence" 
+                      className="mt-2 rounded-md max-h-40 border"
+                    />
+                )}
                   <div className="mt-3 flex items-center gap-2"><Button variant="outline" size="sm" className="pointer-events-none"><ThumbsUp className="w-4 h-4 mr-2" />{c.upvoteCount}</Button></div>
                 </CardContent>
               </Card>
