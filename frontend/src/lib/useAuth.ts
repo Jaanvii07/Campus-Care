@@ -1,44 +1,37 @@
 import { jwtDecode } from 'jwt-decode';
 
-interface AuthToken {
-  id: number;
-  role: string; // Changed to 'string' to handle any capitalization
-  iat: number;
-  exp: number;
-}
-
 export const useAuth = () => {
+  // 1. Get BOTH the token and the saved user details
   const token = localStorage.getItem('token'); 
+  const userStr = localStorage.getItem('user');
   
-  if (token) {
+  if (token && userStr) {
     try {
-      const decodedUser = jwtDecode<AuthToken>(token);
+      // 2. Parse the User Object (This definitely has the role!)
+      const user = JSON.parse(userStr);
       
-      // 1. Check if token is expired
-      if (decodedUser.exp * 1000 < Date.now()) {
+      // 3. Check if token is valid/expired (Security check)
+      const decodedToken = jwtDecode<{ exp: number }>(token);
+      if (decodedToken.exp * 1000 < Date.now()) {
         localStorage.removeItem('token');
+        localStorage.removeItem('user');
         return { isLoggedIn: false };
       }
       
-      // 2. CRITICAL FIX: Convert ANY role to lowercase
-      // This makes "Admin" == "admin", "Department" == "department", etc.
-      const role = (decodedUser.role || '').toLowerCase();
+      // 4. THE FIX: Read role from the USER OBJECT, not the token
+      // We also handle "Student" vs "student" here.
+      const role = (user.role || user.type || '').toLowerCase();
 
       return {
         isLoggedIn: true,
-        
-        // Now these checks work even if the DB sends Capital Letters
         isAdmin: role === 'admin',
         isStudent: role === 'student',
-        
-        // Safe check for staff/department (handles variations)
-        isDepartment: role === 'department' || role === 'staff' || role === 'maintenance',
-        
-        user: decodedUser,
+        // Checks for 'department', 'staff', 'maintenance'
+        isDepartment: ['department', 'staff', 'maintenance'].includes(role),
+        user: user,
       };
     } catch (e) {
-      console.error("Token Error:", e);
-      localStorage.removeItem('token');
+      console.error("Auth Error:", e);
       return { isLoggedIn: false };
     }
   }
