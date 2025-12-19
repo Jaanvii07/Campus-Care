@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cors'); // ✅ Kept this one
+const cors = require('cors'); // ✅ KEPT THIS (Line 2)
 require('dotenv').config();
 const path = require('path');
 const cookieParser = require('cookie-parser');
@@ -13,12 +13,14 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 // --- Middleware ---
-// ❌ REMOVED DUPLICATE 'const cors' line here
 
+// 🗑️ DELETED the duplicate "const cors" line here. It was crashing your app.
+
+// Allow your Vercel Frontend specifically
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://campus-care-eight-azure.vercel.app" 
+    "https://campus-care-eight-azure.vercel.app"
   ],
   credentials: true
 }));
