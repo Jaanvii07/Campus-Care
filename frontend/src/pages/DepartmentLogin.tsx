@@ -22,12 +22,23 @@ const DepartmentLogin = () => {
       // Call the new DEPARTMENT-specific login route
       const response = await api.post('/auth/login/department', { email, password });
       
-      // Store the token
+      // 1. Store the token
       localStorage.setItem('token', response.data.token);
+
+      // 2. CRITICAL FIX: Store User Data so useAuth() works
+      // We manually ensure the role is set to 'department' to prevent the bounce-back
+      if (response.data.user) {
+         localStorage.setItem('user', JSON.stringify(response.data.user));
+      } else {
+         // Fallback if the server sends flat data
+         const deptData = { ...response.data, role: 'department' };
+         localStorage.setItem('user', JSON.stringify(deptData));
+      }
 
       toast({ title: "Login Successful" });
       navigate('/department');
     } catch (error: any) {
+      console.error("Dept Login Error:", error);
       toast({
         title: "Login Failed",
         description: error.response?.data?.message || "An unexpected error occurred.",
@@ -38,6 +49,7 @@ const DepartmentLogin = () => {
     }
   };
 
+  // UI remains exactly as you requested
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-hero opacity-20" />

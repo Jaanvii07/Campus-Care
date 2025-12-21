@@ -18,10 +18,7 @@ const PORT = process.env.PORT || 5001;
 
 // Allow your Vercel Frontend specifically
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://campus-care-eight-azure.vercel.app"
-  ],
+  origin: ['http://localhost:8080', 'https://your-frontend-app.vercel.app'],
   credentials: true
 }));
 

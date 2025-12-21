@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Link, useNavigate } from "react-router-dom";
-import { Shield, Loader2 } from "lucide-react";
+import { ShieldCheck, Loader2 } from "lucide-react"; // Changed icon to Shield for Admin
 import { useToast } from "@/hooks/use-toast";
 import api from "@/lib/api";
 
@@ -18,48 +18,89 @@ const AdminLogin = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    
     try {
-      // Call the new ADMIN-specific login route
+      // Note: implicitly uses '/api' prefix via api.ts
       const response = await api.post('/auth/login/admin', { email, password });
       
-      // Store the token in localStorage so the 'AdminRoute' guard can see it
+      // 🔍 DEBUG: See what the admin response looks like
+      console.log("🔥 ADMIN LOGIN RESPONSE:", response.data);
+
+      // 1. Store the token
       localStorage.setItem('token', response.data.token);
 
-      toast({ title: "Login Successful" });
-      navigate('/admin');
+      // 2. Store user info (The Fix: Handle both nested and flat data)
+      if (response.data.user) {
+        // Format A: { token: '...', user: { role: 'admin', ... } }
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      } else {
+        // Format B: Fallback if data is flat or named differently
+        // We manually ensure the role is set to 'admin' just in case
+        const adminData = { ...response.data, role: 'admin' };
+        localStorage.setItem('user', JSON.stringify(adminData));
+      }
+
+      toast({ title: "Admin Login Successful" });
+      
+      // 3. Navigate to the Admin Dashboard
+      navigate('/admin'); 
+
     } catch (error: any) {
-     toast({
-      title: "Login Failed",
-      description: error.response?.data?.message, // This will show "Access denied. Not an admin account."
-      variant: "destructive",
-    });
+      console.error("Admin Login Error:", error);
+      toast({
+        title: "Login Failed",
+        description: error.response?.data?.message || "Invalid admin credentials",
+        variant: "destructive",
+      });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-hero opacity-20" />
-      <Link to="/" className="absolute top-6 left-6"><Button variant="ghost">← Back to Home</Button></Link>
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-slate-950">
+      {/* Darker background for Admin to distinguish it */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 to-slate-800 opacity-50" />
+      <Link to="/" className="absolute top-6 left-6"><Button variant="ghost" className="text-white hover:text-white/80">← Back to Home</Button></Link>
       
-      <Card className="glass-card w-full max-w-md relative z-10 animate-slide-up">
+      <Card className="glass-card w-full max-w-md relative z-10 animate-slide-up border-slate-700 bg-slate-900/50 text-white">
         <CardHeader className="text-center space-y-2">
-          <CardTitle className="text-3xl font-bold"><span className="text-gradient">Admin Portal</span></CardTitle>
-          <CardDescription className="text-base">Sign in with your administrator account</CardDescription>
+          <CardTitle className="text-3xl font-bold text-white">Admin Portal</CardTitle>
+          <CardDescription className="text-slate-400">Secure access for administrators</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2"><Label htmlFor="email">Email</Label><Input id="email" type="email" placeholder="admin@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-            <div className="space-y-2"><Label htmlFor="password">Password</Label><Input id="password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing In...</> : <><Shield className="w-4 h-4 mr-2" /> Sign In as Admin</>}
+            <div className="space-y-2">
+                <Label htmlFor="email" className="text-slate-200">Email</Label>
+                <Input 
+                  id="email" 
+                  type="email" 
+                  placeholder="admin@campus.edu" 
+                  value={email} 
+                  onChange={(e) => setEmail(e.target.value)} 
+                  required 
+                  className="bg-slate-800 border-slate-700 text-white"
+                />
+            </div>
+            <div className="space-y-2">
+                <Label htmlFor="password" className="text-slate-200">Password</Label>
+                <Input 
+                  id="password" 
+                  type="password" 
+                  placeholder="••••••••" 
+                  value={password} 
+                  onChange={(e) => setPassword(e.target.value)} 
+                  required 
+                  className="bg-slate-800 border-slate-700 text-white"
+                />
+            </div>
+            <Button type="submit" className="w-full bg-red-600 hover:bg-red-700 text-white" disabled={isSubmitting}>
+              {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Verifying...</> : <><ShieldCheck className="w-4 h-4 mr-2" /> Access Admin Dashboard</>}
             </Button>
           </form>
+
           <div className="mt-6 text-center text-sm space-x-2">
-            <Link to="/login" className="font-semibold text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Student Portal</Link>
-            <span>•</span>
-            <Link to="/login/department" className="font-semibold text-muted-foreground underline-offset-4 hover:text-primary hover:underline">Staff Portal</Link>
+            <Link to="/login/student" className="font-semibold text-slate-400 underline-offset-4 hover:text-white hover:underline">Student Portal</Link>
           </div>
         </CardContent>
       </Card>

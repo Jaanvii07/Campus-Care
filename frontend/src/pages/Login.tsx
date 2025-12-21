@@ -10,7 +10,7 @@ import api from "@/lib/api";
 
 const Login = () => {
   const { toast } = useToast();
-  const navigate = useNavigate(); // Using standard React Router navigation
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -20,24 +20,40 @@ const Login = () => {
     setIsSubmitting(true);
     
     try {
+      // Note: We are using the corrected '/api' prefix implicitly via api.ts or proxy
       const response = await api.post('/auth/login/student', { email, password });
       
+      // ---------------------------------------------------------
+      // 🕵️ DEBUG SECTION: Check what the server actually sent
+      // ---------------------------------------------------------
+      console.log("🔥 FULL SERVER RESPONSE:", response.data);
+      console.log("👀 Is 'user' inside data?:", response.data.user);
+      
+      if (!response.data.user) {
+        console.error("❌ CRITICAL ERROR: 'user' object is MISSING in response!");
+        // If user is missing, maybe the properties are at the top level?
+        console.log("Maybe the role is here directly?", response.data.role);
+      }
+      // ---------------------------------------------------------
+
       // Store the token
       localStorage.setItem('token', response.data.token);
 
-      // Store user info
+      // Store user info (HANDLE BOTH FORMATS)
       if (response.data.user) {
+        // Format A: { token: '...', user: { role: 'student' } }
         localStorage.setItem('user', JSON.stringify(response.data.user));
+      } else if (response.data.role) {
+        // Format B: { token: '...', role: 'student', email: '...' }
+        // If data is flat, we save the whole response as the user
+        localStorage.setItem('user', JSON.stringify(response.data));
       }
 
       toast({ title: "Login Successful" });
-      
-      // ORIGINAL REDIRECT METHOD:
-      // This navigates without reloading the page.
-      // (Ensure your App.tsx route is exactly "/student")
       navigate('/student'); 
 
     } catch (error: any) {
+      console.error("Login Error:", error);
       toast({
         title: "Login Failed",
         description: error.response?.data?.message || "An unexpected error occurred.",
