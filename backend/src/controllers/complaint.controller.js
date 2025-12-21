@@ -17,41 +17,54 @@ const formatComplaints = (complaints, userId) => {
 
 exports.createComplaint = async (req, res) => {
     try {
-        const { title, description, department, location ,imageUrl} = req.body;
-       // const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+        const { title, description, department, location, imageUrl } = req.body;
 
-        if (!department || !location) return res.status(400).json({ message: "Required fields missing." });
+        if (!department || !location) {
+            return res.status(400).json({ message: "Required fields missing." });
+        }
 
+        // 1. Create the Complaint (Fast)
         const complaint = await Complaint.create({
-            title, description, imageUrl: imageUrl || null, department, location, status: 'in-progress', studentId: req.user.id
+            title, 
+            description, 
+            imageUrl: imageUrl || null, 
+            department, 
+            location, 
+            status: 'in-progress', 
+            studentId: req.user.id
         });
 
-        // Notify Student
+        // 2. Fetch User Details (Fast)
         const student = await User.findByPk(req.user.id);
+        const departmentUser = await User.findOne({ where: { department: department }});
+
+        // 3. Send Emails in BACKGROUND (Don't wait for them!)
+        // notice we REMOVED 'await' here
         if (student) {
-            await sendEmail({
+            sendEmail({
                 to: student.email,
                 subject: `Complaint Submitted: ${title}`,
                 html: `<p>Your complaint for <b>${location}</b> has been sent to <b>${department}</b>.</p>`
-            });
+            }).catch(err => console.error("Student email failed:", err)); 
         }
 
-        // Notify Department
-        const departmentUser = await User.findOne({ where: { department: department }});
         if (departmentUser) {
-             await sendEmail({
+             sendEmail({
                 to: departmentUser.email,
                 subject: `New Task: ${title}`,
                 html: `<p>New task at <b>${location}</b>.</p>`
-            });
+            }).catch(err => console.error("Dept email failed:", err));
         }
 
+        // 4. Send Response Immediately
         const newComplaint = await Complaint.findByPk(complaint.id, {
              include: { model: User, as: 'student', attributes: ['email'] }
         });
-        // Return manually formatted object for the single new item
+        
         res.status(201).json({ ...newComplaint.toJSON(), upvoteCount: 0, hasUpvoted: false });
+
     } catch (error) {
+        console.error("Create Error:", error);
         res.status(500).json({ message: "Failed to create complaint", error: error.message });
     }
 };

@@ -167,7 +167,7 @@ const DepartmentDashboard = () => {
         </Dialog>
 
         <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
-           <DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Complaint Image</DialogTitle></DialogHeader>{viewImageUrl && <img src={`http://localhost:5001${viewImageUrl}`} alt="Complaint visual" className="rounded-md object-contain max-h-[70vh] w-auto mx-auto"/>}</DialogContent>
+           <DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Complaint Image</DialogTitle></DialogHeader>{viewImageUrl && <img src={viewImageUrl} alt="Complaint visual" className="rounded-md object-contain max-h-[70vh] w-auto mx-auto"/>}</DialogContent>
         </Dialog>
 
         <div className="space-y-4">
@@ -198,8 +198,8 @@ const DepartmentDashboard = () => {
               <CardContent className="space-y-3">
                 <p className="text-sm text-muted-foreground">{task.description}</p>
                 <p className="text-sm font-semibold mt-2">Location: <span className="font-normal">{task.location}</span></p>
-                {task.imageUrl && <img src={`http://localhost:${task.imageUrl}`} alt="Complaint visual" className="mt-2 rounded-md max-h-40 border"/>}
-                
+                  {/* ✅ CORRECT: Use the image from the current task */}
+                {task.imageUrl && <img src={task.imageUrl} alt="Complaint visual" className="mt-2 rounded-md max-h-40 border"/>}        
                 <div className="flex justify-between items-center">
                     <Badge className={`${getStatusColor(task.status)} gap-1`}>{getStatusIcon(task.status)}{task.status}</Badge>
                     

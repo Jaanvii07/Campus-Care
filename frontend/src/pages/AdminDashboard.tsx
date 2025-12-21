@@ -138,7 +138,7 @@ const AdminDashboard = () => {
         </div>
 
         <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
-           <DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Complaint Image</DialogTitle></DialogHeader>{viewImageUrl && <img src={`http://localhost:5001${viewImageUrl}`} alt="Complaint visual" className="rounded-md object-contain max-h-[70vh] w-auto mx-auto"/>}</DialogContent>
+           <DialogContent className="max-w-3xl"><DialogHeader><DialogTitle>Complaint Image</DialogTitle></DialogHeader>{viewImageUrl && <img src={viewImageUrl} alt="Complaint visual" className="rounded-md object-contain max-h-[70vh] w-auto mx-auto"/>}</DialogContent>
         </Dialog>
 
         {/* --- UPDATED TWO-COLUMN LAYOUT --- */}
@@ -172,7 +172,7 @@ const AdminDashboard = () => {
                       <div><Label className="text-xs text-muted-foreground">Location</Label><p className="font-semibold">{locations.find(l => l.value === complaint.location)?.label || complaint.location}</p></div>
                       <div><Label className="text-xs text-muted-foreground">Department</Label><p className="font-semibold text-primary">{complaint.department}</p></div>
                   </div>
-                  {complaint.imageUrl && <img src={`http://localhost:5001${complaint.imageUrl}`} alt="Complaint visual" className="mt-4 rounded-md max-h-40 border"/>}
+                {complaint.imageUrl && <img src={complaint.imageUrl} alt="Complaint visual" className="mt-4 rounded-md max-h-40 border"/>}
                   <div className="flex items-center gap-2 mt-4">
                     <Button variant={complaint.hasUpvoted ? "default" : "outline"} size="sm" onClick={() => handleUpvote(complaint.id)}>
                       <ThumbsUp className={cn("w-4 h-4 mr-2", complaint.hasUpvoted && "fill-white")} />
