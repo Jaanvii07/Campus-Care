@@ -19,7 +19,8 @@ const PORT = process.env.PORT || 5001;
 // Allow your Vercel Frontend specifically
 app.use(cors({
   origin: ['http://localhost:8080', 'https://campus-care-eight-azure.vercel.app'],
-  credentials: true
+  credentials: true,
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 app.use(cookieParser());
