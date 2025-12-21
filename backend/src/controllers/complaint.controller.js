@@ -17,13 +17,13 @@ const formatComplaints = (complaints, userId) => {
 
 exports.createComplaint = async (req, res) => {
     try {
-        const { title, description, department, location } = req.body;
-        const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+        const { title, description, department, location ,imageUrl} = req.body;
+       // const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
 
         if (!department || !location) return res.status(400).json({ message: "Required fields missing." });
 
         const complaint = await Complaint.create({
-            title, description, imageUrl, department, location, status: 'in-progress', studentId: req.user.id
+            title, description, imageUrl: imageUrl || null, department, location, status: 'in-progress', studentId: req.user.id
         });
 
         // Notify Student
