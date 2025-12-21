@@ -14,6 +14,10 @@ import { SearchableCombobox } from "@/components/ui/SearchableCombobox";
 import api from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+// 🔴 STEP 1: PASTE YOUR CLOUDINARY DETAILS HERE
+const CLOUDINARY_CLOUD_NAME = "dixhhsik1"; 
+const CLOUDINARY_UPLOAD_PRESET = "campus_care_uploads"; 
+
 interface Complaint {
   id: string;
   title: string;
@@ -54,7 +58,7 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [history, setHistory] = useState<Complaint[]>([]);
-  const [publicComplaints, setPublicComplaints] = useState<Complaint[]>([]); // Community Feed
+  const [publicComplaints, setPublicComplaints] = useState<Complaint[]>([]);
   const [newComplaint, setNewComplaint] = useState({ title: "", description: "" });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -62,18 +66,15 @@ const StudentDashboard = () => {
   const [department, setDepartment] = useState("");
   const [location, setLocation] = useState("");
   
-  // Filters for Community Tab
   const [filterDept, setFilterDept] = useState("all");
   const [filterLoc, setFilterLoc] = useState("");
 
   const fetchComplaints = async () => {
     try {
-      // 1. Fetch MY complaints
       const myResponse = await api.get('/complaints/student');
       setComplaints(myResponse.data.filter((c: Complaint) => c.status === 'in-progress'));
       setHistory(myResponse.data.filter((c: Complaint) => c.status === 'resolved'));
 
-      // 2. Fetch PUBLIC complaints (Community)
       const publicResponse = await api.get('/complaints/public');
       setPublicComplaints(publicResponse.data);
     } catch (error: any) { console.error("Failed to fetch data:", error); }
@@ -81,26 +82,57 @@ const StudentDashboard = () => {
 
   useEffect(() => { fetchComplaints(); }, []);
 
+  // 🔴 STEP 2: NEW UPLOAD FUNCTION
+  const uploadToCloudinary = async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    formData.append("cloud_name", CLOUDINARY_CLOUD_NAME);
+
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: "POST",
+        body: formData
+    });
+
+    if (!res.ok) throw new Error("Cloudinary upload failed");
+    const data = await res.json();
+    return data.secure_url; // Returns the HTTPs URL
+  };
+
+  // 🔴 STEP 3: UPDATED SUBMIT HANDLER
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!department || !location) {
         toast({ title: "Error", description: "Please select both a department and a location.", variant: "destructive" });
         return;
     }
+    
     setIsSubmitting(true);
-    const formData = new FormData();
-    formData.append('title', newComplaint.title);
-    formData.append('description', newComplaint.description);
-    formData.append('department', department);
-    formData.append('location', location);
-    if (selectedFile) formData.append('image', selectedFile);
 
     try {
-      const response = await api.post('/complaints', formData);
+      let uploadedImageUrl = "";
+
+      // Upload Image to Cloudinary FIRST (if selected)
+      if (selectedFile) {
+        toast({ title: "Uploading Image...", description: "Please wait." });
+        uploadedImageUrl = await uploadToCloudinary(selectedFile);
+      }
+
+      // Send JSON Data to Backend (Not FormData anymore)
+      const payload = {
+          title: newComplaint.title,
+          description: newComplaint.description,
+          department,
+          location,
+          imageUrl: uploadedImageUrl // Send the URL string
+      };
+
+      const response = await api.post('/complaints', payload);
+      
       const newComp = { ...response.data, upvoteCount: 0, hasUpvoted: false };
       
       setComplaints([newComp, ...complaints]);
-      setPublicComplaints([newComp, ...publicComplaints]); // Add to public feed too
+      setPublicComplaints([newComp, ...publicComplaints]);
 
       setNewComplaint({ title: "", description: "" });
       setSelectedFile(null);
@@ -108,9 +140,12 @@ const StudentDashboard = () => {
       setLocation("");
       const fileInput = document.getElementById('image-upload') as HTMLInputElement;
       if (fileInput) fileInput.value = "";
+      
       toast({ title: "Complaint Submitted Successfully" });
+
     } catch (error: any) {
-      toast({ title: "Submission Failed", description: error.response?.data?.message, variant: "destructive" });
+      console.error(error);
+      toast({ title: "Submission Failed", description: "Could not submit complaint. Check connection.", variant: "destructive" });
     } finally { setIsSubmitting(false); }
   };
 
@@ -130,7 +165,7 @@ const StudentDashboard = () => {
       await api.post(`/complaints/${complaintId}/upvote`);
     } catch (error) {
       toast({ title: "Error", description: "Vote failed.", variant: "destructive" });
-      fetchComplaints(); // Revert on error by re-fetching
+      fetchComplaints(); 
     }
   };
 
@@ -141,12 +176,18 @@ const StudentDashboard = () => {
 
   const handleLogout = () => { localStorage.removeItem('token'); toast({ title: "Logged Out" }); navigate("/login"); };
 
-  // Filter Logic
   const filteredCommunity = publicComplaints.filter(c => {
     const matchesDept = filterDept === "all" || c.department === filterDept;
     const matchesLoc = filterLoc === "" || c.location === filterLoc;
     return matchesDept && matchesLoc;
   });
+
+  // 🔴 STEP 4: HELPER FOR DISPLAYING IMAGES
+  const getImageUrl = (path?: string) => {
+      if (!path) return null;
+      if (path.startsWith("http")) return path; // It's a Cloudinary URL
+      return `${import.meta.env.VITE_BACKEND_URL || 'https://campus-care-2-y1sf.onrender.com'}${path}`; // It's a local path
+  };
 
   return (
     <div className="min-h-screen p-4 sm:p-6 lg:p-8">
@@ -163,7 +204,6 @@ const StudentDashboard = () => {
             <TabsTrigger value="history" className="gap-2"><CheckCircle2 className="w-4 h-4" />History</TabsTrigger>
           </TabsList>
 
-          {/* --- NEW COMMUNITY TAB --- */}
           <TabsContent value="community" className="space-y-4">
             <div className="flex flex-col sm:flex-row gap-4 p-4 bg-secondary/20 rounded-lg border">
                 <div className="flex-1">
@@ -216,7 +256,7 @@ const StudentDashboard = () => {
                       <div><Label>Location *</Label><SearchableCombobox options={locations} value={location} onChange={setLocation} placeholder="Select room..." emptyMessage="No location found." /></div>
                   </div>
                   <div><Label>Description *</Label><Textarea value={newComplaint.description} onChange={(e) => setNewComplaint({ ...newComplaint, description: e.target.value })} required /></div>
-                  <div><Label>Photo (Optional)</Label><Input type="file" accept="image/*" onChange={handleFileChange} /></div>
+                  <div><Label>Photo (Optional)</Label><Input type="file" accept="image/*" onChange={handleFileChange} id="image-upload" /></div>
                   <Button type="submit" className="w-full" disabled={isSubmitting}>{isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Submitting...</> : 'Submit Complaint'}</Button>
                 </form>
               </CardContent>
@@ -238,13 +278,15 @@ const StudentDashboard = () => {
                   <p className="mb-2">{c.description}</p>
                   <p className="text-sm font-semibold mt-2">Location: {c.location}</p>
 
+                  {/* 🔴 STEP 5: USE THE HELPER FUNCTION HERE */}
                   {c.imageUrl && (
                     <img 
-                      src={`${import.meta.env.VITE_BACKEND_URL || 'https://campus-care-2-y1sf.onrender.com'}${c.imageUrl}`} 
+                      src={getImageUrl(c.imageUrl) || ''} 
                       alt="Evidence" 
                       className="mt-2 rounded-md max-h-40 border"
                     />
-                )}
+                  )}
+                  
                   <div className="mt-3 flex items-center gap-2"><Button variant="outline" size="sm" className="pointer-events-none"><ThumbsUp className="w-4 h-4 mr-2" />{c.upvoteCount}</Button></div>
                 </CardContent>
               </Card>
