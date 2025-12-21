@@ -12,13 +12,24 @@ const api = axios.create({
   },
 });
 
+// 2. REQUEST INTERCEPTOR: Attach & Clean Token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    // 1. Get Token
+    let token = localStorage.getItem("token");
     
+    // 2. DEBUG: Print it to the console
+    if (!token) {
+        console.error("❌ FATAL ERROR: No token found in LocalStorage! Request will fail.");
+    } else {
+        // Remove quotes if they exist
+        token = token.replace(/"/g, '');
+        console.log("✅ Attaching Token:", token.substring(0, 10) + "...");
+        
+        // 3. Attach to Headers
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+
     // Handle File Uploads
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
@@ -28,18 +39,4 @@ api.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 );
-
-// 2. RESPONSE INTERCEPTOR: Log errors but DO NOT REDIRECT
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // We just log the error. We do NOT kick the user out.
-    if (error.response && error.response.status === 401) {
-      console.error("⚠️ API 401 Unauthorized - Check your Token or Backend logic.");
-      // window.location.href = '/login'; // <--- DISABLED TO STOP THE LOOP
-    }
-    return Promise.reject(error);
-  }
-);
-
 export default api;
