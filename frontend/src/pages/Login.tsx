@@ -7,9 +7,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { User, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import api from "@/lib/api";
+import { jwtDecode } from "jwt-decode"; // <--- ADD THIS IMPORT
 
 const Login = () => {
   const { toast } = useToast();
+  // navigate is unused for the final redirect, but kept for links if needed
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,43 +22,49 @@ const Login = () => {
     setIsSubmitting(true);
     
     try {
-      // Note: We are using the corrected '/api' prefix implicitly via api.ts or proxy
       const response = await api.post('/auth/login/student', { email, password });
       
-      // ---------------------------------------------------------
-      // 🕵️ DEBUG SECTION: Check what the server actually sent
-      // ---------------------------------------------------------
-      console.log("🔥 FULL SERVER RESPONSE:", response.data);
-      console.log("👀 Is 'user' inside data?:", response.data.user);
+      // 1. Get the Token
+      const token = response.data.token;
+      if (!token) throw new Error("No token received from server");
       
-      if (!response.data.user) {
-        console.error("❌ CRITICAL ERROR: 'user' object is MISSING in response!");
-        // If user is missing, maybe the properties are at the top level?
-        console.log("Maybe the role is here directly?", response.data.role);
+      localStorage.setItem('token', token);
+
+      // 2. THE FIX: Handle Missing User Object
+      // If the backend doesn't send 'user', we extract it from the token
+      let user = response.data.user;
+
+      if (!user) {
+        console.log("⚠️ User object missing in response. Decoding token...");
+        try {
+          const decoded: any = jwtDecode(token);
+          // Construct the user object manually from the token
+          user = {
+            id: decoded.id || decoded.userId,
+            email: decoded.email || decoded.sub,
+            role: decoded.role || decoded.type || 'student' 
+          };
+        } catch (err) {
+          console.error("Token decode failed:", err);
+        }
       }
-      // ---------------------------------------------------------
 
-      // Store the token
-      localStorage.setItem('token', response.data.token);
-
-      // Store user info (HANDLE BOTH FORMATS)
-      if (response.data.user) {
-        // Format A: { token: '...', user: { role: 'student' } }
-        localStorage.setItem('user', JSON.stringify(response.data.user));
-      } else if (response.data.role) {
-        // Format B: { token: '...', role: 'student', email: '...' }
-        // If data is flat, we save the whole response as the user
-        localStorage.setItem('user', JSON.stringify(response.data));
+      // 3. Save the User Object (Crucial for useAuth)
+      if (user) {
+        localStorage.setItem('user', JSON.stringify(user));
+        toast({ title: "Login Successful" });
+        
+        // 4. Force Redirect to Dashboard
+        window.location.href = '/student';
+      } else {
+        throw new Error("Could not retrieve user details.");
       }
-
-      toast({ title: "Login Successful" });
-      navigate('/student'); 
 
     } catch (error: any) {
       console.error("Login Error:", error);
       toast({
         title: "Login Failed",
-        description: error.response?.data?.message || "An unexpected error occurred.",
+        description: error.response?.data?.message || "Invalid credentials or server error.",
         variant: "destructive",
       });
     } finally {
